@@ -1,0 +1,24 @@
+# AI agent (the only part that calls the Claude API)
+anthropic>=0.40
+
+# Telegram bot
+python-telegram-bot>=21.0
+
+# API for the dashboard
+fastapi>=0.110
+uvicorn>=0.29
+
+# Data, validation, config
+pydantic>=2.6
+PyYAML>=6.0
+python-dotenv>=1.0
+numpy>=1.26
+pandas>=2.2
+Faker>=24.0
+
+# Uplift model (Day 2)
+scikit-learn>=1.4
+
+# Harness
+pytest>=8.0
+hypothesis>=6.100
