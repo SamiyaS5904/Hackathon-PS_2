@@ -1,0 +1,2 @@
+# Keep line endings consistent (LF) in the repo, whatever OS edits the files.
+* text=auto eol=lf
