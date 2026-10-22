@@ -13,7 +13,7 @@ order in which we build. Read this before touching any file.
 ---
 
 ## 🚦 Approval gate (read first)
-- **No code is written until the user approves this CLAUDE.md.** Status: **WAITING FOR APPROVAL**.
+- **No code is written until the user approves this CLAUDE.md.** Status: **APPROVED (2026-10-22)**.
 - Open discussion items (see "Open decisions" at the bottom) must be settled with the user first.
 - When approved, change the status to `APPROVED (<date>)` and log it in documentation.md.
 - Any later change to this file also needs the user's approval before it is followed.
@@ -304,7 +304,8 @@ The user must be able to open any Python file and understand what it does and wh
 - **Every function has a docstring**: inputs, output, and the business reason it exists.
 - **Comment the business logic**: explain *why* (e.g. "skip discount: this customer buys anyway, a coupon would
   only lose margin"), not just *what*. Mark planned parts with `# TODO(session N): ...`.
-- Clear names (`expected_profit_paise`, not `ep`). Python 3.11, type hints, small pure functions in `engine/`.
+- Clear names (`expected_profit_paise`, not `ep`). Python 3.11+ (dev machine: 3.12), type hints, small pure
+  functions in `engine/`.
 - Add a harness test for every new rule.
 
 ## 11. Git workflow: small commits

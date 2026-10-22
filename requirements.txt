@@ -14,7 +14,6 @@ PyYAML>=6.0
 python-dotenv>=1.0
 numpy>=1.26
 pandas>=2.2
-Faker>=24.0
 
 # Uplift model (Day 2)
 scikit-learn>=1.4
