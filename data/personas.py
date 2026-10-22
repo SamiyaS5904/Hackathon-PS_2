@@ -66,7 +66,7 @@ class PersonaSpec:
 PERSONAS: list[PersonaSpec] = [
     PersonaSpec(
         name="loyal_regular", label="Loyal regular", share=0.18,
-        order_gap_days=(8, 16), regularity=(0.7, 0.9), visits_per_day=0.25,
+        order_gap_days=(8, 16), regularity=(0.7, 0.9), visits_per_day=0.15,
         price_sensitivity=(0.2, 0.4), deal_affinity=(0.1, 0.3), churn_propensity=(0.05, 0.2),
         spam_tolerance=(0.3, 0.6), cart_abandon=(0.1, 0.2),
         festival_lift=1.2, payday_lift=1.1, weekend_lift=1.15, repeat_rate=0.6,
@@ -80,7 +80,7 @@ PERSONAS: list[PersonaSpec] = [
     ),
     PersonaSpec(
         name="deal_hunter", label="Deal hunter", share=0.16,
-        order_gap_days=(30, 50), regularity=(0.3, 0.5), visits_per_day=0.30,
+        order_gap_days=(30, 50), regularity=(0.3, 0.5), visits_per_day=0.18,
         price_sensitivity=(0.7, 0.95), deal_affinity=(0.7, 0.95), churn_propensity=(0.2, 0.4),
         spam_tolerance=(0.5, 0.8), cart_abandon=(0.3, 0.45),
         festival_lift=3.5, payday_lift=1.3, weekend_lift=1.2, repeat_rate=0.2,
@@ -93,7 +93,7 @@ PERSONAS: list[PersonaSpec] = [
     ),
     PersonaSpec(
         name="vip_at_risk", label="About-to-leave VIP", share=0.08,
-        order_gap_days=(6, 12), regularity=(0.6, 0.85), visits_per_day=0.35,
+        order_gap_days=(6, 12), regularity=(0.6, 0.85), visits_per_day=0.20,
         price_sensitivity=(0.2, 0.4), deal_affinity=(0.3, 0.5), churn_propensity=(0.7, 0.9),
         spam_tolerance=(0.2, 0.4), cart_abandon=(0.15, 0.25),
         festival_lift=1.4, payday_lift=1.1, weekend_lift=1.1, repeat_rate=0.5,
@@ -107,7 +107,7 @@ PERSONAS: list[PersonaSpec] = [
     ),
     PersonaSpec(
         name="window_shopper", label="Window shopper", share=0.15,
-        order_gap_days=(70, 140), regularity=(0.2, 0.4), visits_per_day=0.45,
+        order_gap_days=(70, 140), regularity=(0.2, 0.4), visits_per_day=0.28,
         price_sensitivity=(0.5, 0.8), deal_affinity=(0.4, 0.6), churn_propensity=(0.3, 0.5),
         spam_tolerance=(0.2, 0.4), cart_abandon=(0.5, 0.7),
         festival_lift=1.8, payday_lift=1.2, weekend_lift=1.3, repeat_rate=0.1,
@@ -121,7 +121,7 @@ PERSONAS: list[PersonaSpec] = [
     ),
     PersonaSpec(
         name="new_user", label="New user", share=0.10,
-        order_gap_days=(15, 35), regularity=(0.3, 0.5), visits_per_day=0.30,
+        order_gap_days=(15, 35), regularity=(0.3, 0.5), visits_per_day=0.20,
         price_sensitivity=(0.4, 0.7), deal_affinity=(0.4, 0.6), churn_propensity=(0.3, 0.5),
         spam_tolerance=(0.3, 0.5), cart_abandon=(0.25, 0.35),
         festival_lift=1.5, payday_lift=1.2, weekend_lift=1.2, repeat_rate=0.25,
@@ -135,7 +135,7 @@ PERSONAS: list[PersonaSpec] = [
     ),
     PersonaSpec(
         name="cart_abandoner", label="Cart abandoner", share=0.13,
-        order_gap_days=(25, 45), regularity=(0.3, 0.5), visits_per_day=0.35,
+        order_gap_days=(25, 45), regularity=(0.3, 0.5), visits_per_day=0.22,
         price_sensitivity=(0.5, 0.8), deal_affinity=(0.4, 0.6), churn_propensity=(0.2, 0.4),
         spam_tolerance=(0.4, 0.6), cart_abandon=(0.6, 0.8),
         festival_lift=1.6, payday_lift=1.2, weekend_lift=1.2, repeat_rate=0.2,
@@ -149,7 +149,7 @@ PERSONAS: list[PersonaSpec] = [
     ),
     PersonaSpec(
         name="points_hoarder", label="Points hoarder", share=0.10,
-        order_gap_days=(12, 22), regularity=(0.6, 0.8), visits_per_day=0.25,
+        order_gap_days=(12, 22), regularity=(0.6, 0.8), visits_per_day=0.15,
         price_sensitivity=(0.3, 0.5), deal_affinity=(0.2, 0.4), churn_propensity=(0.1, 0.25),
         spam_tolerance=(0.4, 0.6), cart_abandon=(0.15, 0.25),
         festival_lift=1.3, payday_lift=1.1, weekend_lift=1.1, repeat_rate=0.5,
@@ -163,10 +163,12 @@ PERSONAS: list[PersonaSpec] = [
     ),
     PersonaSpec(
         name="festival_only", label="Festival-only buyer", share=0.10,
-        order_gap_days=(200, 300), regularity=(0.2, 0.3), visits_per_day=0.12,
+        # Natural gap is short, but outside sales their buying is cut to ~15% (see generate.py), so
+        # nearly all their orders land inside festival sales.
+        order_gap_days=(60, 100), regularity=(0.2, 0.3), visits_per_day=0.08,
         price_sensitivity=(0.6, 0.9), deal_affinity=(0.7, 0.9), churn_propensity=(0.3, 0.5),
         spam_tolerance=(0.2, 0.4), cart_abandon=(0.3, 0.4),
-        festival_lift=25.0, payday_lift=1.1, weekend_lift=1.1, repeat_rate=0.1,
+        festival_lift=20.0, payday_lift=1.1, weekend_lift=1.1, repeat_rate=0.1,
         basket_items=(1, 3), prefers_expensive=False,
         category_bias={"electronics": 2.5, "home": 2, "fashion": 2, "beauty": 1, "grocery": 0.5},
         uplift={"pct_off": (0.10, 0.20), "flat_off": (0.10, 0.15), "free_delivery": (0.03, 0.06),
