@@ -64,3 +64,56 @@ Newest entries at the bottom.
 - **Repo:** https://github.com/SamiyaS5904/Hackathon-PS_2
 
 **Next:** user gives final approval of CLAUDE.md → Session 1 (configs, schema, data generator).
+
+---
+
+## 2026-10-22: Session 1: Configs, schema and synthetic data
+**Built:**
+- Offer building blocks (6 offer types and their cost models) and default guardrail rules
+- Settings loader (`.env`), 17-table SQLite schema, DB helper
+- Synthetic data generator: product catalog (280 products, fictional brands), Indian names/cities, festival
+  calendar, 8 hidden personas, day-by-day simulation of 3,000 customers over 12 months
+
+**Files:** `config/offers.yaml`, `config/rules.yaml`, `config/settings.py`, `db/schema.sql`, `db/store.py`,
+`data/catalog.py`, `data/calendar_gen.py`, `data/personas.py`, `data/generate.py`, `.gitattributes`
+
+**How to run / check:**
+```bash
+python -m data.generate --customers 3000 --months 12          # add --force to rebuild
+```
+Takes ~80s, writes `data/offerpilot.db` (~170 MB, not committed) and prints a summary.
+
+**Result of the full run (seed 42, window 2025-10-22 to 2026-10-21):**
+| Table | Rows |
+|---|---|
+| customers | 3,000 |
+| sessions | 277,049 |
+| browse_events | 1,194,656 |
+| cart_events | 325,371 |
+| orders / order_items | 35,785 / 76,920 |
+| wallet_txns | 9,449 |
+| points_ledger | 49,739 |
+| offers_history (26 past campaigns) | 19,683 |
+
+Broken links between tables: **0**.
+
+**Patterns verified:**
+- Loyal regulars order every ~15 days; VIPs every ~12 days but **86% are now overdue** (habit broke).
+- Points hoarders lose ~2,100 points each to expiry; cart abandoners abandon ~32 carts each.
+- Festival days: 139 orders/day vs 88 on normal days.
+- **Effect of past offers (sent vs holdout, buy within 48h):** deal hunters +12.2 pts, festival-only +8.3,
+  VIPs +7.6, new users +6.5, cart abandoners +5.5, points hoarders +5.3, window shoppers +0.8,
+  **loyal regulars +0.5** (they buy anyway, so offers are wasted on them). This is exactly the signal the agent
+  and the profit math must use.
+
+**Decisions & why:**
+- No Faker dependency: own name/city lists (fewer installs, deterministic).
+- Product margins chosen so default category caps leave room above the 10% margin floor; grocery is
+  deliberately tight (18-28% margin, 10% cap) so the margin guardrail has real work to do.
+- Visits per day lowered ~40% after a 300-customer trial: the first version would have made a ~400 MB database.
+- Foreign keys are checked once after loading (orders and offers reference each other), result: 0 problems.
+
+**Commits:** config, db and data modules each committed separately (see `git log`).
+
+**Next:** Session 2: analyst features (habit signals), profit math, rules store + checker, fallback +
+templates, gatekeeper + Day Plan, `decide.py` (fallback-only), rule tests.
