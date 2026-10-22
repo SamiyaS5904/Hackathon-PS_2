@@ -1,0 +1,115 @@
+# =====================================================================================================
+# DEFAULT RULES (GUARDRAILS)
+# -----------------------------------------------------------------------------------------------------
+# These are the STARTING values of every business rule. On first run they are copied into the database
+# as "rules version 1". After that, the marketing team edits them on the dashboard Rules page, and every
+# save becomes a new version (engine/rules_store.py).
+#
+# Code must NEVER hard-code a limit. Always read the active version through get_active_rules().
+#
+# Every rule says what happens when it is broken:
+#   reject -> offer is blocked; the reason goes back to the agent so it can try again
+#   repair -> a small safe fix is applied automatically (e.g. 25% clamped down to 15%)
+#
+# Money in rupees here for readability; code converts to integer paise.
+# Full explanation of each rule: CLAUDE.md section 4.
+# =====================================================================================================
+
+version_note: "Default rules (from config/rules.yaml)"
+
+# -----------------------------------------------------------------------------------------------------
+# 4.1 PROFIT PROTECTION (the most important group: the company must never lose money on an offer)
+# -----------------------------------------------------------------------------------------------------
+profit:
+  # expected_profit = P(buy|offer) x margin_after_offer - P(buy|no offer) x normal_margin  (engine/profit.py)
+  min_expected_profit_rupees: 20       # below this the offer isn't worth it -> reject
+  margin_floor_pct: 10                 # order must keep at least 10% margin after the offer -> reject/repair
+
+  # Highest discount allowed per category, in % of the order value -> repair (clamp to cap)
+  category_cap_pct:
+    electronics: 8
+    fashion: 30
+    beauty: 25
+    home: 20
+    grocery: 10
+
+  # "Buys anyway" protection: if the customer would very likely buy without any offer,
+  # a discount only gives away margin. Allow only zero/low-cost perks instead.
+  buys_anyway_threshold: 0.70          # P(buy without offer) above this -> no discounts
+  perks_allowed_for_buys_anyway: [points_multiplier, early_access]
+
+  # Limits per offer type
+  flat_off_max_pct_of_min_order: true  # flat discount must be <= category cap % of the min order -> repair
+  free_delivery_min_order_rupees: 299  # free delivery only above this order value -> repair (raise min order)
+  cashback_max_rupees: 200             # -> repair
+  points_multiplier_max: 3             # -> repair
+
+# -----------------------------------------------------------------------------------------------------
+# 4.2 BUDGET
+# -----------------------------------------------------------------------------------------------------
+budget:
+  daily_rupees: 5000                   # total offer cost allowed per day -> reject
+  monthly_rupees: 100000               # -> reject
+  per_customer_monthly_rupees: 500     # -> reject
+  circuit_breaker:
+    pause_when_daily_budget_used: true # stop all offers once today's budget is gone
+    blocked_rate_window: 20            # look at the last 20 decisions...
+    blocked_rate_max: 0.50             # ...if more than 50% were blocked, pause and alert
+
+# -----------------------------------------------------------------------------------------------------
+# 4.3 ANTI-SPAM
+# -----------------------------------------------------------------------------------------------------
+anti_spam:
+  max_offers_per_7_days: 2             # -> reject
+  min_hours_between_offers: 24         # -> reject
+  quiet_hours_start: "22:00"           # IST; sending in quiet hours -> repair (move to quiet_hours_end)
+  quiet_hours_end: "08:00"
+  respect_marketing_consent: true      # consent = false -> never send (reject)
+
+# -----------------------------------------------------------------------------------------------------
+# 4.4 INTEGRITY
+# -----------------------------------------------------------------------------------------------------
+integrity:
+  max_active_offers_per_customer: 1    # no stacking -> reject
+  min_expiry_hours: 2                  # -> repair to nearest limit
+  max_expiry_hours: 48
+  require_known_product_or_category: true   # -> reject
+  require_known_offer_type: true            # -> reject
+
+# -----------------------------------------------------------------------------------------------------
+# 4.5 FAIRNESS
+# -----------------------------------------------------------------------------------------------------
+fairness:
+  loyal_min_orders: 5                  # 5+ orders = loyal customer
+  loyal_never_worse_than_new_days: 7   # compare with offers new customers got in the last 7 days -> repair/reject
+  no_offer_after_full_price_days: 7    # bought this product at full price in the last 7 days -> reject
+
+# -----------------------------------------------------------------------------------------------------
+# 4.6 MESSAGE SAFETY
+# -----------------------------------------------------------------------------------------------------
+message:
+  max_chars: 300                       # -> reject
+  allow_links: false                   # -> reject
+  must_match_offer: true               # amount, expiry, product in the text must match the offer -> reject
+  banned_phrases:                      # fake urgency / scarcity -> reject
+    - "only 1 left"
+    - "only one left"
+    - "last chance"
+    - "hurry"
+    - "selling fast"
+    - "few left"
+    - "ending soon"
+    - "act now"
+    - "don't miss out"
+
+# -----------------------------------------------------------------------------------------------------
+# SAFETY BOUNDS FOR EDITS (the Rules page refuses values outside these, so an edit can't lose money)
+# -----------------------------------------------------------------------------------------------------
+edit_bounds:
+  margin_floor_pct: {min: 0, max: 50}
+  category_cap_pct: {min: 0, max_rule: "category average margin minus margin_floor_pct"}
+  daily_rupees: {min: 0}
+  monthly_rupees: {min: 0}
+  per_customer_monthly_rupees: {min: 0}
+  max_offers_per_7_days: {min: 0, max: 7}
+  min_hours_between_offers: {min: 0, max: 168}
