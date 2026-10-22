@@ -1,0 +1,80 @@
+# =====================================================================================================
+# OFFER BUILDING BLOCKS
+# -----------------------------------------------------------------------------------------------------
+# This file is the "menu of ingredients" the AI agent can use to BUILD an offer.
+# The agent does not pick a ready-made coupon. It chooses:
+#     type + amount + product/category + min order + expiry + send time + message
+# and this file says what each type means and how much it costs the company.
+#
+# Who reads this file:
+#   - engine/agent.py      -> tells the agent which offer types exist (tool: get_offer_limits)
+#   - engine/profit.py     -> uses `cost_model` to work out what an offer costs the company
+#   - engine/rules.py      -> checks the agent stayed inside these shapes
+#   - data/generate.py     -> past campaigns in the synthetic data use the same types
+#
+# The LIMITS (max %, budget, frequency...) are NOT here. They live in config/rules.yaml, because the
+# marketing team edits limits, while the offer shapes rarely change.
+#
+# Money is written in rupees here for readability. Code converts to integer paise.
+# =====================================================================================================
+
+offer_types:
+
+  pct_off:
+    label: "Percentage discount"
+    description: "X% off on a product or category, above a minimum order value."
+    amount_unit: percent          # amount = 10 means 10% off
+    cost_model: percent_of_order  # company pays amount% of the order value
+    zero_cost: false
+    needs_target: true            # must name a product or a category
+
+  flat_off:
+    label: "Flat discount"
+    description: "Rs X off when the order is above a minimum value."
+    amount_unit: rupees           # amount = 150 means Rs 150 off
+    cost_model: flat              # company pays exactly the amount
+    zero_cost: false
+    needs_target: true
+
+  free_delivery:
+    label: "Free delivery"
+    description: "Delivery fee waived on the next order above a minimum value."
+    amount_unit: none             # no amount; the cost is the delivery fee
+    cost_model: delivery_fee      # company pays the delivery fee (see delivery_fee_rupees below)
+    zero_cost: false
+    needs_target: false
+
+  cashback_to_wallet:
+    label: "Wallet cashback"
+    description: "Rs X credited to the customer's wallet after the order is delivered."
+    amount_unit: rupees
+    cost_model: flat
+    zero_cost: false
+    needs_target: true
+
+  points_multiplier:
+    label: "Bonus reward points"
+    description: "Earn 2x or 3x reward points on the next order."
+    amount_unit: multiplier       # amount = 2 means double points
+    cost_model: points            # small cost: extra points have a rupee value (see point_value_rupees)
+    zero_cost: false
+    needs_target: false
+
+  early_access:
+    label: "Early access"
+    description: "Shop a sale or new collection before everyone else."
+    amount_unit: none
+    cost_model: none              # costs the company nothing
+    zero_cost: true
+    needs_target: true
+
+# -----------------------------------------------------------------------------------------------------
+# Shared numbers used by the cost models above
+# -----------------------------------------------------------------------------------------------------
+delivery_fee_rupees: 40           # what one delivery costs us; this is the cost of free_delivery
+point_value_rupees: 0.10          # 1 reward point is worth 10 paise when redeemed
+points_per_100_rupees: 10         # customers normally earn 10 points per Rs 100 spent (1 point per Rs 10)
+
+# Allowed values for the "send time" and "expiry" building blocks.
+# (Hard limits on expiry are also enforced in rules.yaml -> integrity.)
+expiry_hours_options: [2, 6, 12, 24, 48]
