@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Generated data
+*.db
+*.sqlite
+*.sqlite3
+data/output/
+
+# Saved agent answers for harness replays (can be large)
+harness/recordings/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.hypothesis/
+
+# Dashboard
+node_modules/
+dashboard/dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
