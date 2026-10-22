@@ -68,6 +68,14 @@ offer_types:
     zero_cost: true
     needs_target: true
 
+  reminder:
+    label: "Friendly reminder"
+    description: "A free nudge with no discount: points about to expire, unused wallet balance."
+    amount_unit: none
+    cost_model: none              # costs nothing; used for the zero-cost nudges (CLAUDE.md agent priority 3)
+    zero_cost: true
+    needs_target: false
+
 # -----------------------------------------------------------------------------------------------------
 # Shared numbers used by the cost models above
 # -----------------------------------------------------------------------------------------------------
