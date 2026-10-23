@@ -28,7 +28,7 @@ empty folder `D:\Hackathon PS_2`. No phone numbers. No Telegram group. No bargai
           or SEND NOTHING; writes structured reasoning for the manager
      ▼
 [5 RULES CHECKER] pure Python: ✅ approve / 🔧 repair / ❌ reject → reason back to agent (max 2 retries)
-                  API error / timeout >10s / 2 rejections / bad output → [5b FALLBACK RULES]
+                  API error / timeout >30s / 2 rejections / bad output → [5b FALLBACK RULES]
      ▼
 [6 DELIVERY] customer linked to a real tester? → Telegram message
              not linked → saved as "would send" (decision still fully logged)

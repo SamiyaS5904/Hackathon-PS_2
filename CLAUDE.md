@@ -107,7 +107,8 @@ Agent priorities, in order:
   so no API call is wasted on them.
 - Every agent decision logs its real token usage and cost (`input_tokens`, `output_tokens`, `cost_usd`) in the
   `decisions` table. The dashboard shows cost per decision and today's total.
-- Timeout: 10s per API call. Max 6 tool turns per decision.
+- Timeout: 30s per API call (`AGENT_TIMEOUT_SECONDS`). Max 6 tool turns per decision. (Changed from 10s on
+  2026-10-23 with the user's approval: real Opus calls took up to 15s, so 10s would have failed most decisions.)
 - No API key in `.env` → the whole system still works, using the fallback.
 - Harness tests that use the agent (5 and 6) run only when the user asks, on a small sample, and **save the
   agent's answers** so re-running them later is free.
@@ -362,3 +363,5 @@ Out of scope: customer UI, mini shop/wallet for testers, bargaining, phone numbe
 6. **Business goal:** keep customers ordering and protect habits; win back lapsed customers with offers on their
    favourite items (section 1).
 7. **GitHub repo:** https://github.com/SamiyaS5904/Hackathon-PS_2 (small, clear commits, pushed after each step).
+8. **AI timeout (2026-10-23):** 30 seconds per API call. A timeout is only a deadline: it doesn't change the AI's
+   output or the cost of a successful call; too short a timeout wastes calls and sends decisions to the fallback.
