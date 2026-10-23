@@ -269,3 +269,36 @@ call (~Rs 8; it only wrote to its temporary test database). New autouse fixture 
 
 **Pending user decision:** optimization "give the agent the profile + limits up front" (saves ~1 call per
 decision, est. 15-20% cheaper and 3-5s faster, same output). Not done yet: waiting for a yes.
+
+---
+
+## 2026-10-23: Agent cost optimization (user asked: cheaper, but keep output quality)
+**Kept:** Claude Opus, effort `medium` (it was already medium), 30s timeout.
+
+**Changed (`engine/agent.py`):**
+- Customer profile + current rule limits are sent **in the first message** (the agent used to spend a whole API call
+  fetching them). The tools still exist.
+- The offer-type guide moved into the system prompt (cached and reused across customers); limits list type names only.
+- The agent checks **4-6 ideas in one turn** (parallel `estimate_profit` calls) and must always include the cheap
+  options (2x/3x points, reminder, free delivery) next to any discount.
+- Compact JSON (no spaces, no empty fields) for the first message and tool results.
+- Reasoning kept tight: summary 1-2 sentences, 3-6 signals, up to 5 alternatives, one-line why-now.
+- Cache read/write tokens and API call count are now tracked per decision.
+
+**Measured on the same 4 customers at the same moment (dry run):**
+| Customer | Cost before -> after | Time | API calls | Decision |
+|---|---|---|---|---|
+| Mansi (habit broken) | $0.0890 -> $0.0702 (-21%) | 43s -> 18s | 4 -> 2 | same (3x points) |
+| Aarohi (cart) | $0.0857 -> $0.0707 (-18%) | 22s -> 16s | 3 -> 2 | same (free delivery) |
+| Neha (points expiring) | $0.1062 -> $0.0828 (-22%)* | 33s -> 26s | 5 -> 2 | same (3x points, Rs 113) |
+| Khushi (buys anyway) | $0.0647 -> $0.0672 (+4%) | 17s -> 17s | 3 -> 2 | same (wallet reminder) |
+| **Total** | **$0.345 -> ~$0.29 (about -17 to -19%)** | **115s -> ~77s** | **15 -> 8** | |
+
+\* First optimized run found only a Rs 46 reminder for Neha (it checked too few ideas and skipped points). Fixed by
+the "always include the cheap options, 4-6 ideas" rule; the re-run found 3x points (Rs 113) again with 6 ideas checked.
+Evidence: [docs/evidence/cost_optimization_2026-10-23.txt](docs/evidence/cost_optimization_2026-10-23.txt).
+
+**Quality check:** same decisions as the first run for all 4; reasoning is shorter but still names the key facts with
+values and every alternative with its profit. Prompt caching works: ~4,800 tokens read from cache per decision.
+
+**Cost per decision now: ~$0.07 (~Rs 6)**, vs ~$0.086 (~Rs 7.6) before. 50 AI decisions/day ~ Rs 300.
