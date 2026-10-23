@@ -50,7 +50,7 @@ def load_settings() -> Settings:
     return Settings(
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", "").strip(),
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
-        claude_model=os.getenv("CLAUDE_MODEL", "claude-opus-5-5").strip(),
+        claude_model=os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5").strip(),
         max_agent_runs_per_day=int(os.getenv("MAX_AGENT_RUNS_PER_DAY", "50")),
         db_path=db_path,
     )

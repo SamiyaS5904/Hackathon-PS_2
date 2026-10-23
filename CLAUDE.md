@@ -93,7 +93,13 @@ Agent priorities, in order:
 | Harness tests 1-4 | ❌ No | Use a fake agent that returns scripted proposals |
 | Harness 5-6 (agent eval, profit simulation) | ✅ Yes | Run on demand only (see Open decisions) |
 
-**Model:** Claude Opus (`CLAUDE_MODEL=claude-opus-5-5`), chosen for the strongest reasoning. Changeable in `.env`.
+**Model:** Claude Sonnet 5.5 (`CLAUDE_MODEL=claude-sonnet-5-5`), effort `medium`. Changed from Opus on 2026-10-24
+with the user's approval to cut cost (~Rs 6 -> target ~Rs 1.5 per decision). Changeable in `.env`.
+
+**One-call design:** before calling the AI, code builds and prices 6-10 **candidate offers** (`engine/candidates.py`,
+each already checked by the rules except the message). They go into the AI's first message with the profile and
+limits, so the AI usually picks or adjusts one and calls `propose_offer` / `propose_no_offer` in its first reply.
+All 7 tools stay available for the cases where the AI wants an idea that isn't in the list.
 
 **API cost guard:**
 - The agent runs **only** when a trigger fires or the manager clicks "Run agent". Never for all 3,000 customers at once.
@@ -225,6 +231,8 @@ message always matches the offer; no fake urgency):
   early_access), amount, product/category, min order, expiry (2-48h), send time, message.
 - `get_customer_profile` includes habit signals (usual gap, overdue ratio, favourite items/categories) so the
   agent can target habit breaks with favourite-item offers.
+- The first message already contains the profile, the limits and the pre-priced candidate offers (one-call design).
+  Offer types also include `reminder` (a free nudge with no discount, used for points expiring / wallet balance).
 - **Reasoning required on every decision**, in plain language a marketing manager understands:
   - `summary`: the decision in 1-2 lines
   - `signals_used`: facts relied on, with values ("40 days inactive", "ignored 10% off last week")
@@ -357,7 +365,8 @@ Out of scope: customer UI, mini shop/wallet for testers, bargaining, phone numbe
 1. **Agent tests and cost:** harness 5-6 run only on request, on a small sample, with saved answers for free re-runs.
 2. **Daily agent limit:** set each day on the dashboard Day Plan (default 50); `MAX_AGENT_RUNS_PER_DAY=50` is the
    hard ceiling. Overflow goes to the fallback. Real cost per decision is logged and shown.
-3. **Model:** Claude Opus (`claude-opus-5-5`).
+3. **Model:** Claude Sonnet 5.5 (`claude-sonnet-5-5`) with the one-call design (section 3). Was Opus until
+   2026-10-24; switched by the user for cost.
 4. **Fallback messages:** fixed generic templates (section 4.8).
 5. **Rules:** starting values in section 4; the marketing team edits them from the dashboard Rules page (section 4.0).
 6. **Business goal:** keep customers ordering and protect habits; win back lapsed customers with offers on their
