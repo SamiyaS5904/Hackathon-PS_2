@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 
-from engine.agent import MAX_API_CALLS, AgentContext, run_agent
+from engine.agent import MAX_API_CALLS, AgentContext, compact_json, prices, run_agent
 from engine.decide import decide
 from engine.gatekeeper import agent_runs_used, set_day_plan
 from harness.conftest import NOON_IST, make_profile
@@ -44,7 +44,9 @@ def test_good_proposal_is_approved(profile, catalog, rules, state, now):
     # The request is shaped correctly for Claude Opus 5.5
     first = client.calls[0]
     assert first["output_config"] == {"effort": "medium"} and "tool_choice" not in first
-    assert all(t["strict"] for t in first["tools"]) and "OfferPilot" in first["system"]
+    assert all(t["strict"] for t in first["tools"]) and "OfferPilot" in first["system"][0]["text"]
+    # Only the stable instructions are cached (shared by all customers), not the customer's own data
+    assert first["system"][0]["cache_control"] == {"type": "ephemeral"} and "cache_control" not in first
 
 
 def test_rejection_reasons_go_back_and_agent_fixes_offer(profile, catalog, rules, state, now):
@@ -153,8 +155,39 @@ def test_cache_tokens_and_calls_are_tracked(profile, catalog, rules, state, now)
     step.usage = cached
     out = run_agent(context(profile, catalog, rules, state, now), client=ScriptedClient([step]))
     assert out.api_calls == 1 and out.cache_read_tokens == 4000 and out.input_tokens == 4300
-    # 300 x $4 + 4000 x $0.20 + 200 x $20, per million tokens
-    assert abs(out.cost_usd - (300 * 4 + 4000 * 0.20 + 200 * 20) / 1_000_000) < 1e-6
+    # Priced with the configured model's prices (Sonnet 5.5 by default: $2 in, $0.20 cache read, $10 out per M)
+    price = prices()
+    expected = (300 * price["input"] + 4000 * price["cache_read"] + 200 * price["output"]) / 1_000_000
+    assert abs(out.cost_usd - expected) < 1e-6
+
+
+def test_first_message_contains_priced_candidates(profile, catalog, rules, state, now):
+    client = ScriptedClient([tool_call("propose_no_offer", {"reasoning": REASONING})])
+    out = run_agent(context(profile, catalog, rules, state, now), client=client)
+    first = client.calls[0]["messages"][0]["content"]
+    menu = json.loads(first.split("<candidate_offers>")[1].split("</candidate_offers>")[0])
+    assert menu and menu == json.loads(compact_json(out.candidates))
+    assert all("expected_profit_rupees" in c for c in menu)
+
+
+def test_one_call_decision_picks_a_candidate(profile, catalog, rules, state, now):
+    """The normal path now: the AI proposes a prepared candidate in its very first reply (1 API call)."""
+    def pick_best(messages):
+        first = messages[0]["content"]
+        menu = json.loads(first.split("<candidate_offers>")[1].split("</candidate_offers>")[0])
+        best = next(c for c in menu if c["allowed_by_rules"])["offer"]
+        best.pop("product_name", None)
+        words = {"points_multiplier": f"earn {best['amount']:g}x points", "free_delivery": "free delivery",
+                 "reminder": "a friendly reminder", "early_access": "early access"}
+        text = words.get(best["offer_type"], f"{best['amount']:g}% off")
+        return tool_call("propose_offer", {**best, "send_at_ist": None, "reasoning": REASONING,
+                                           "message": f"Hi Riya! Enjoy {text} on your next order above "
+                                                      f"₹{best['min_order_rupees']}."})
+
+    client = ScriptedClient([pick_best])
+    out = run_agent(context(profile, catalog, rules, state, now), client=client)
+    assert out.status == "approved", out.tool_trace
+    assert out.api_calls == 1 and len(client.calls) == 1
 
 
 # --- through the full pipeline (small real database) ---------------------------------------------
