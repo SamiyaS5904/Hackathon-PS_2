@@ -121,8 +121,14 @@ def priority_score(profile: CustomerProfile, trigger_type: str) -> float:
 
 
 def screen(conn: sqlite3.Connection, profile: CustomerProfile, rules: ActiveRules, state: RuleState,
-           now: datetime, trigger_type: str, want_agent: bool = True) -> GateResult:
-    """Decide where this trigger goes: skip it, ask the AI, or use the free fallback."""
+           now: datetime, trigger_type: str, want_agent: bool = True,
+           agent_available: bool | None = None) -> GateResult:
+    """
+    Decide where this trigger goes: skip it, ask the AI, or use the free fallback.
+    `agent_available` defaults to "is an API key configured?"; tests pass True when they supply a fake AI client.
+    """
+    if agent_available is None:
+        agent_available = settings.agent_enabled
     priority = priority_score(profile, trigger_type)
     spam = rules.anti_spam
 
@@ -144,7 +150,7 @@ def screen(conn: sqlite3.Connection, profile: CustomerProfile, rules: ActiveRule
     # Agent or fallback?
     if not want_agent:
         return GateResult("fallback", "AI was switched off for this run", priority)
-    if not settings.agent_enabled:
+    if not agent_available:
         return GateResult("fallback", "no Claude API key is configured", priority)
     plan, used = get_day_plan(conn, ist_date(now)), agent_runs_used(conn, now)
     if used >= plan:

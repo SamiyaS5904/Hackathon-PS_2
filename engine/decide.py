@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from db.store import connect
+from engine.agent import AgentContext, AgentOutcome, run_agent
 from engine.catalog import Catalog, load_catalog
 from engine.clock import now_utc, parse_ts, to_ist, to_ts
 from engine.fallback import fallback_decide
@@ -67,14 +68,18 @@ class DecisionOutcome:
 
 def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manual",
            trigger_detail: dict | None = None, now: datetime | None = None, use_agent: bool = True,
-           dry_run: bool = False, catalog: Catalog | None = None) -> DecisionOutcome:
-    """Make, explain and (unless dry_run) save one decision for one customer."""
+           dry_run: bool = False, catalog: Catalog | None = None, agent_client=None) -> DecisionOutcome:
+    """
+    Make, explain and (unless dry_run) save one decision for one customer.
+    `agent_client` lets tests plug in a fake AI; normally the real client is created only if a key exists.
+    """
     now = now or now_utc()
     catalog = catalog or load_catalog(conn)
     rules = get_active_rules(conn)
     profile = build_profile(conn, customer_id, now, catalog)
     state = load_rule_state(conn, customer_id, rules, now)
-    gate = screen(conn, profile, rules, state, now, trigger_type, want_agent=use_agent)
+    gate = screen(conn, profile, rules, state, now, trigger_type, want_agent=use_agent,
+                  agent_available=True if agent_client is not None else None)
 
     if gate.route == "skip":
         outcome = DecisionOutcome(
@@ -83,17 +88,49 @@ def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manu
                        "signals_used": [], "alternatives_considered": [],
                        "expected_impact": "No cost; no AI call spent.", "why_now": gate.reason},
             rule_checks=[], expected_profit_paise=None, offer_cost_paise=None, rules_version=rules.version)
+    elif gate.route == "agent":
+        ctx = AgentContext(conn, profile, catalog, rules, state, now, trigger_type, trigger_detail)
+        agent = run_agent(ctx, client=agent_client)
+        if agent.status == "approved":
+            outcome = _agent_outcome(agent, profile, rules, now, trigger_type)
+        elif agent.status == "no_offer":
+            outcome = DecisionOutcome(
+                customer_id, profile.first_name, trigger_type, "agent", "nothing", None,
+                reasoning=agent.reasoning, rule_checks=[], expected_profit_paise=None, offer_cost_paise=None,
+                rules_version=rules.version)
+        else:
+            # The AI failed (error, timeout, junk, too many rejections): the free fallback decides instead.
+            outcome = _fallback_outcome(profile, catalog, rules, state, now, trigger_type, agent.error)
+            outcome.reasoning["agent_attempt"] = {"error": agent.error, "rejected_proposals": agent.rejected_proposals}
+            if outcome.offer is None and agent.rejected_proposals:
+                outcome.status = "blocked"  # counts towards the circuit breaker
+        # The AI was called, so its cost and trace are recorded whatever happened (counts in the Day Plan)
+        outcome.tool_trace, outcome.proposal = agent.tool_trace, agent.first_proposal or outcome.proposal
+        outcome.input_tokens, outcome.output_tokens = agent.input_tokens, agent.output_tokens
+        outcome.cost_usd = agent.cost_usd
     else:
-        why_fallback = gate.reason
-        if gate.route == "agent":
-            # TODO(session 3): call engine.agent here; if it returns an approved offer, use it.
-            why_fallback = "the AI agent is not connected yet (Session 3)"
-        outcome = _fallback_outcome(profile, catalog, rules, state, now, trigger_type, why_fallback)
+        outcome = _fallback_outcome(profile, catalog, rules, state, now, trigger_type, gate.reason)
 
     outcome.created_at = to_ts(now)
     if not dry_run:
         outcome.decision_id = _save(conn, outcome, trigger_detail)
     return outcome
+
+
+def _agent_outcome(agent: AgentOutcome, profile: CustomerProfile, rules, now: datetime,
+                   trigger_type: str) -> DecisionOutcome:
+    """An approved AI decision. Any automatic repairs by the rules are added to the reasoning, so the manager sees
+    exactly what the AI proposed and what the rules changed."""
+    check = agent.check
+    reasoning = dict(agent.reasoning)
+    repairs = [c.detail for c in check.checks if c.result == "repaired"]
+    if repairs:
+        reasoning["rule_repairs"] = repairs
+    return DecisionOutcome(
+        profile.customer_id, profile.first_name, trigger_type, "agent", _delivery_status(check, profile, now),
+        check.offer, reasoning=reasoning, rule_checks=[c.model_dump() for c in check.checks],
+        expected_profit_paise=check.profit.expected_profit_paise if check.profit else None,
+        offer_cost_paise=check.profit.offer_cost_paise if check.profit else None, rules_version=rules.version)
 
 
 def _fallback_outcome(profile: CustomerProfile, catalog: Catalog, rules, state, now: datetime,
@@ -195,6 +232,16 @@ def format_decision(o: DecisionOutcome) -> str:
         lines.append(f"  NOTE     {r['decided_by_note']}")
     for a in r.get("alternatives_considered", []):
         lines.append(f"  ALSO     {a[:160]}")
+    if r.get("why_now"):
+        lines.append(f"  WHY NOW  {r['why_now']}")
+    for repair in r.get("rule_repairs", []):
+        lines.append(f"  REPAIRED {repair[:160]}")
+    if r.get("agent_attempt"):
+        lines.append(f"  AI       tried but failed: {r['agent_attempt']['error']}")
+    for step in o.tool_trace:
+        lines.append(f"  TOOL     {step['tool']}: {str(step.get('result', ''))[:140]}")
+    if o.input_tokens is not None:
+        lines.append(f"  COST     {o.input_tokens:,} input + {o.output_tokens:,} output tokens = ${o.cost_usd:.4f}")
     for c in o.rule_checks:
         if c["result"] != "passed":
             lines.append(f"  RULE     [{c['result']}] {c['rule']}: {c['detail'][:160]}")
