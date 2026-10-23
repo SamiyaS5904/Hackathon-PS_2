@@ -5,13 +5,15 @@ Where it sits: STEP 4 of the pipeline, and the ONLY file that uses the Claude AP
     decide.py -> gatekeeper says "agent" -> run_agent() -> Claude calls tools -> propose_offer
              -> rules checker (inside the loop) -> approved: done | rejected: reasons back to Claude -> try again
 
-How one decision works:
-  1. Claude gets the customer id, the trigger ("cart abandoned", "manual"...) and a set of tools.
-  2. It looks the customer up: get_customer_profile, get_recent_activity, get_offer_history, get_offer_limits.
-  3. It can test ideas with estimate_profit (the numbers come from engine/profit.py; Claude never does the math).
-  4. It finishes with propose_offer (building blocks + message + reasoning for the manager) or propose_no_offer.
-  5. propose_offer goes straight through engine/rules.py. If rejected, the reasons go back as the tool result and
-     Claude can fix the offer. After 2 rejected proposals, the agent stops and the free fallback decides.
+How one decision works (one-call design, CLAUDE.md section 3):
+  1. Code builds a personalised menu of candidate offers and prices + rule-checks each one (engine/candidates.py).
+  2. Claude's first message holds the trigger, the customer profile, the current limits and that menu.
+  3. Claude judges which candidate fits this customer's story, may adjust it (checking with estimate_profit), writes
+     the message and the reasoning, and calls propose_offer, or propose_no_offer. Usually all in ONE API call.
+  4. propose_offer goes straight through engine/rules.py (now including the message). If rejected, the reasons go
+     back as the tool result and Claude can fix the offer. After 2 rejected proposals the free fallback decides.
+  All 7 tools stay available (profile, recent activity, offer history, limits, estimate_profit, propose...), so
+  Claude can still explore beyond the menu when it needs to.
 
 Safety and cost limits:
   - Max 6 API calls per decision; 30s timeout per call (AGENT_TIMEOUT_SECONDS in .env). Real Opus calls took
@@ -38,6 +40,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from config.settings import settings
+from engine.candidates import build_candidates
 from engine.catalog import Catalog
 from engine.clock import IST, ist_date, to_ist
 from engine.features import CustomerProfile
@@ -51,8 +54,17 @@ MAX_REJECTED_PROPOSALS = 2
 TIMEOUT_SECONDS = float(os.getenv("AGENT_TIMEOUT_SECONDS", "30"))
 EFFORT = os.getenv("AGENT_EFFORT", "medium")
 
-# Claude Opus 5.5 prices per 1M tokens (USD). Cache writes cost 1.25x input, cache reads $0.20.
-PRICE_PER_M = {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache_read": 0.20}
+# Prices per 1M tokens (USD). Cache writes (5-minute) cost 1.25x input; cache reads are much cheaper.
+PRICES_PER_M = {
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00, "cache_write": 2.50, "cache_read": 0.20},
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache_read": 0.20},
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "cache_write": 0.125, "cache_read": 0.01},  # read assumed 10%
+}
+
+
+def prices() -> dict:
+    """Prices for the configured model (unknown model -> Opus prices, so cost is never under-reported)."""
+    return PRICES_PER_M.get(settings.claude_model, PRICES_PER_M["claude-opus-5-5"])
 
 OFFER_TYPES = ["pct_off", "flat_off", "free_delivery", "cashback_to_wallet", "points_multiplier", "early_access",
                "reminder"]
@@ -74,13 +86,17 @@ Keep customers ordering regularly, profitably. Priorities, in order:
 - reminder: a free nudge with no discount (points expiring, unused wallet balance).
 
 ## How to work
-- The customer's profile and what the rules allow right now are already in the first message: don't fetch them again.
-- Call get_recent_activity or get_offer_history only if they would change your decision.
-- Build the offer from the building blocks: offer_type, amount, product_id or category, min_order_rupees, expiry_hours, send time, message.
-- Compare ideas with estimate_profit. In ONE turn, check 4-6 ideas at once by calling estimate_profit several times,
-  then decide. Always include the cheap options that apply (points_multiplier at 2x and 3x, reminder, free_delivery)
-  next to any discount, so the cheapest offer that works is never missed. Never invent numbers: the profit math is
-  done by the tool.
+- The first message already contains the customer's profile, what the rules allow right now, and CANDIDATE OFFERS
+  that code has built for this customer and priced (chance to buy without/with the offer, cost, expected profit) and
+  checked against every rule except the message. Don't fetch the profile or limits again.
+- Usually decide in your FIRST reply: pick the candidate that best fits this customer, write the message and the
+  reasoning, and call propose_offer with that candidate's exact fields. Or call propose_no_offer.
+- The most profitable allowed candidate is usually right. Pick another only for a clear reason from the customer's
+  story (e.g. they ignored that offer type several times), and say so in the reasoning.
+- Only if no candidate fits, or you want to change one (another product, amount or category), check your idea with
+  estimate_profit first, then propose. get_recent_activity and get_offer_history are there if you really need them.
+- Build offers from the building blocks: offer_type, amount, product_id or category, min_order_rupees, expiry_hours,
+  send time, message. Never invent numbers: use the candidates' numbers or estimate_profit.
 - Prefer the cheapest offer that works: a free nudge or bonus points before a discount, a small discount before a big one.
 - Finish by calling exactly one of: propose_offer or propose_no_offer.
 - Every proposal is checked by the company's rules. If it is rejected you get the reasons: fix the offer and propose again,
@@ -97,7 +113,7 @@ Keep customers ordering regularly, profitably. Priorities, in order:
 The manager reads your reasoning to understand and trust the decision. Write in plain, tight language:
 - summary: the decision in 1-2 sentences.
 - signals_used: the 3-6 facts that mattered most, each with its value (e.g. "Usually orders every 12 days; last order 31 days ago").
-- alternatives_considered: up to 5 other options and why each lost, with its expected profit when you have it.
+- alternatives_considered: up to 5 other candidates (or ideas) and why each lost, with its expected profit.
 - expected_impact: chance to buy before -> after and expected profit, copied from estimate_profit.
 - why_now: one sentence on why this moment.
 
@@ -299,6 +315,7 @@ class AgentOutcome:
     cache_read_tokens: int = 0               # input served from the prompt cache (10x cheaper)
     cache_write_tokens: int = 0              # input written to the cache (1.25x, pays off on the next call)
     api_calls: int = 0
+    candidates: list[dict] = field(default_factory=list)  # offers code prepared and priced for the AI
     cost_usd: float = 0.0
     error: str | None = None
 
@@ -316,8 +333,9 @@ def _add_usage(outcome: "AgentOutcome", usage: Any) -> None:
     written = getattr(usage, "cache_creation_input_tokens", 0) or 0
     read = getattr(usage, "cache_read_input_tokens", 0) or 0
     out = getattr(usage, "output_tokens", 0) or 0
-    cost = (fresh * PRICE_PER_M["input"] + written * PRICE_PER_M["cache_write"] + read * PRICE_PER_M["cache_read"]
-            + out * PRICE_PER_M["output"]) / 1_000_000
+    price = prices()
+    cost = (fresh * price["input"] + written * price["cache_write"] + read * price["cache_read"]
+            + out * price["output"]) / 1_000_000
     outcome.input_tokens += fresh + written + read
     outcome.output_tokens += out
     outcome.cache_read_tokens += read
@@ -326,10 +344,10 @@ def _add_usage(outcome: "AgentOutcome", usage: Any) -> None:
     outcome.cost_usd = round(outcome.cost_usd + cost, 5)
 
 
-def _first_message(ctx: AgentContext) -> str:
+def _first_message(ctx: AgentContext, candidates: list[dict]) -> str:
     """
-    The task plus the two things the agent always needs (profile and current limits), so it doesn't spend a whole
-    API call fetching them. Same information as the tools return, in compact JSON.
+    The task plus everything the agent needs to decide in one call: profile, current limits and the pre-priced
+    candidate offers (engine/candidates.py). Same information as the tools return, in compact JSON.
     """
     trigger = ctx.trigger_type.replace("_", " ")
     detail = f" Details: {compact_json(ctx.trigger_detail)}." if ctx.trigger_detail else ""
@@ -338,7 +356,8 @@ def _first_message(ctx: AgentContext) -> str:
             f"({ist_date(ctx.now)}).\n\n"
             f"<customer_profile>\n{compact_json(tool_customer_profile(ctx))}\n</customer_profile>\n\n"
             f"<offer_limits>\n{compact_json(tool_offer_limits(ctx))}\n</offer_limits>\n\n"
-            f"Compare your ideas with estimate_profit, then finish with propose_offer or propose_no_offer.")
+            f"<candidate_offers>\n{compact_json(candidates)}\n</candidate_offers>\n\n"
+            f"Decide now: propose_offer (usually one of the candidates) or propose_no_offer.")
 
 
 def compact_json(data) -> str:
@@ -367,13 +386,17 @@ def run_agent(ctx: AgentContext, client: Any = None) -> AgentOutcome:
         return outcome
 
     tools = build_tools(ctx.catalog)
-    messages: list[dict] = [{"role": "user", "content": _first_message(ctx)}]
+    outcome.candidates = build_candidates(ctx.profile, ctx.catalog, ctx.rules, ctx.state, ctx.now)
+    messages: list[dict] = [{"role": "user", "content": _first_message(ctx, outcome.candidates)}]
 
     for _ in range(MAX_API_CALLS):
         try:
             response = client.messages.create(
-                model=settings.claude_model, max_tokens=16000, system=SYSTEM_PROMPT, tools=tools,
-                messages=messages, output_config={"effort": EFFORT}, cache_control={"type": "ephemeral"})
+                model=settings.claude_model, max_tokens=16000, tools=tools, messages=messages,
+                # Cache only the stable part (tools + instructions), shared by every customer. The customer's own
+                # data is used once, so writing it to the cache (1.25x price) would cost more than it saves.
+                system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+                output_config={"effort": EFFORT})
         except Exception as exc:  # timeout, connection error, rate limit, server error...
             outcome.error = f"AI call failed: {type(exc).__name__}"
             return outcome
