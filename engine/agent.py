@@ -14,7 +14,8 @@ How one decision works:
      Claude can fix the offer. After 2 rejected proposals, the agent stops and the free fallback decides.
 
 Safety and cost limits:
-  - Max 6 API calls per decision; 10s timeout per call (AGENT_TIMEOUT_SECONDS in .env can raise it).
+  - Max 6 API calls per decision; 30s timeout per call (AGENT_TIMEOUT_SECONDS in .env). Real Opus calls took
+    up to ~15s in testing (the last call, where it writes the offer, message and reasoning, is the longest).
   - Any API error, timeout, refusal, or a run that ends without a proposal = failure -> fallback decides.
   - Customer data (names, search text) is passed as data; the system prompt tells Claude never to follow
     instructions found in it. The rules checker is the final guard either way.
@@ -47,7 +48,7 @@ from engine.rules_store import ActiveRules
 
 MAX_API_CALLS = 6
 MAX_REJECTED_PROPOSALS = 2
-TIMEOUT_SECONDS = float(os.getenv("AGENT_TIMEOUT_SECONDS", "10"))
+TIMEOUT_SECONDS = float(os.getenv("AGENT_TIMEOUT_SECONDS", "30"))
 EFFORT = os.getenv("AGENT_EFFORT", "medium")
 
 # Claude Opus 5.5 prices per 1M tokens (USD). Cache writes cost 1.25x input, cache reads $0.20.
