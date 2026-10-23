@@ -1,0 +1,136 @@
+Picked: [('habit breaking', 648), ('cart left behind', 1790), ('points expiring', 2259), ('regular, on track (buys anyway?)', 128)]
+
+=== habit breaking ===   (43s total, API call times: [14.6, 9.7, 3.7, 15.1])
+Customer #648 Mansi  |  trigger: manual  |  decided by: agent  |  status: SCHEDULED  |  rules v1
+  OFFER    3x reward points, expires in 48h, send 24 Oct 16:00 IST
+  MESSAGE  Hi Mansi, we've missed you! Earn 3x reward points on your next home order, valid for 48 hours. Still looking for a bedsheet? Plus, you have ₹2,278 in your wallet ready to use.
+  WHY      Send a 3x reward points offer on home, Mansi's top category, tomorrow at 16:00 IST. It also reminds her of her unused wallet balance. This is the most profitable option and it costs almost nothing, so we don't need a discount to win back this lapsed, high-value customer.
+           - Habit broken: usually orders every 10.5 days, last order 48.3 days ago (4.6x overdue), habit strength 0.76
+           - High value: 33 orders, ₹53,294 total spend, average order ₹1,694
+           - Home is 42% of her spend. Her last order (Homely Bedsheet Prime) was returned, and her recent searches are 'bedsheet' twice
+           - Deal-seeker score 0.0 and discount dependence 0.0, so discounts are not what drives her
+           - Redeems 88% of her points; has 437 points
+           - ₹2,278 sitting unused in her wallet for 13 days
+           - Ignored all 6 past offers (free delivery, pct_off, early access)
+           - Chance to buy in 48h with no offer: 0.2%
+           - Usually shops around 16:00 IST; quiet hours start at 22:00 and it is 21:06 now
+  IMPACT   Chance to buy in 48h goes from 0.2% to 12.2%. Expected profit ₹69, offer cost about ₹33 per order, margin after the offer 34.2%.
+  ALSO     3x points: ₹69 expected profit (chosen)
+  ALSO     Wallet reminder only: ₹28 expected profit
+  ALSO     2x points: ₹35 expected profit
+  ALSO     10% off Homely Bedsheet Prime: ₹25, costs ₹145 per order
+  ALSO     10% off home over ₹999: ₹23, costs ₹169 per order
+  ALSO     Free delivery: rejected because she ignored it 3 times
+  ALSO     No offer: rejected because she will almost certainly not buy on her own (0.2%) and the offer pays for itself
+  WHY NOW  Her habit is clearly broken and her searches show she still wants a bedsheet. Sending at 21:06 would leave less than an hour before quiet hours, so the offer is scheduled for tomorrow at her usual shopping hour of 16:00. She has had no offers in the last 7 days.
+  TOOL     get_customer_profile: {"customer_id": 648, "first_name": "Mansi", "city": "Nagpur", "city_tier": 2, "age": 34, "language": "English", "marketing_consent": true, "
+  TOOL     get_offer_limits: {"rules_version": 1, "allowed_offer_types": {"pct_off": "X% off on a product or category, above a minimum order value.", "flat_off": "Rs X o
+  TOOL     get_recent_activity: {"last_orders": [{"date": "2026-09-05", "paid_rupees": 1978, "discount_rupees": 0, "status": "returned", "items": ["Woodmark Water Bottle Pl
+  TOOL     get_offer_history: {"response_by_offer_type": {"pct_off": {"sent": 2, "opened": 0, "redeemed": 0, "redeem_rate": 0.0}, "free_delivery": {"sent": 3, "opened": 0
+  TOOL     estimate_profit: {"offer": "reminder message (no discount)", "chance_to_buy_48h": {"without_offer": 0.002, "with_offer": 0.047}, "expected_order_value_rupees
+  TOOL     estimate_profit: {"offer": "10% off on product #175", "chance_to_buy_48h": {"without_offer": 0.002, "with_offer": 0.072}, "expected_order_value_rupees": 1459
+  TOOL     estimate_profit: {"offer": "2x reward points", "chance_to_buy_48h": {"without_offer": 0.002, "with_offer": 0.062}, "expected_order_value_rupees": 1694, "offe
+  TOOL     estimate_profit: {"offer": "10% off on home (min order Rs 999)", "chance_to_buy_48h": {"without_offer": 0.002, "with_offer": 0.056}, "expected_order_value_ru
+  TOOL     estimate_profit: {"offer": "3x reward points", "chance_to_buy_48h": {"without_offer": 0.002, "with_offer": 0.122}, "expected_order_value_rupees": 1694, "offe
+  TOOL     propose_offer: approved: 3x reward points
+  COST     25,424 input + 2,193 output tokens = $0.0890
+  RULES    20/20 checks passed outright
+  SAVED    decision #1
+
+=== cart left behind ===   (22s total, API call times: [3.2, 7.0, 11.5])
+Customer #1790 Aarohi  |  trigger: manual  |  decided by: agent  |  status: SCHEDULED  |  rules v1
+  OFFER    free delivery (min order Rs 299), expires in 48h, send 24 Oct 14:00 IST
+  MESSAGE  Hi Aarohi! Your Mira Lipstick Plus is still waiting in your cart. Enjoy free delivery on your next order above ₹299 for the next 48 hours. Happy shopping!
+  WHY      Send a free-delivery offer (min order ₹299, 48h) tied to the Mira Lipstick Plus left in her cart, scheduled for tomorrow 14:00 IST, her usual shopping hour.
+           - Habit on track: usually orders every 19.9 days; last order 8.3 days ago (overdue ratio 0.42), so no habit-break offer needed
+           - Open cart: Mira Lipstick Plus ₹729, abandoned 54.2 hours ago; it is a favourite item (bought 6 times) and she recently searched 'lipstick'
+           - Chance to buy in 48h without an offer: 2.2%, far below the 70% 'buys anyway' threshold
+           - Offer history: free delivery 1/1 redeemed (used on 2026-10-14); points multipliers 0/2, pct_off 0/1, early access 0/1
+           - Low deal-seeker score (0.12) and discount dependence (0.05): a discount isn't needed, a light incentive fits
+           - Anti-spam OK: 0 offers in last 7 days, 225 hours since last offer; quiet hours start 22:00 and her usual shopping hour is 14:00
+  IMPACT   Chance to buy in 48h: 2.2% -> 21.3%. Offer cost ₹40, margin after offer 48.3%, expected profit ₹66 vs sending nothing.
+  ALSO     Reminder only (cart/wallet nudge): 2.2% -> 9.1%, expected profit ₹27, lower than free delivery
+  ALSO     10% off Mira Lipstick Plus: 2.2% -> 19.9%, expected profit ₹54, costs ₹72 and lowers margin for a customer who rarely needs discounts
+  ALSO     ₹100 off with min order ₹729: 2.2% -> 13.2%, expected profit ₹29; she ignored a similar ₹100 beauty flat-off in August
+  ALSO     Points multiplier: rejected because she ignored both earlier ones
+  ALSO     No offer: rejected because her chance to buy is only 2.2% with an abandoned cart of a favourite item
+  WHY NOW  The cart has been abandoned for over 2 days and the intent is still fresh. Since it is 21:06 now and quiet hours start at 22:00, sending at 14:00 tomorrow (her usual shopping hour) gives the full 48h window when she is most likely to shop.
+  TOOL     get_customer_profile: {"customer_id": 1790, "first_name": "Aarohi", "city": "Nagpur", "city_tier": 2, "age": 54, "language": "English", "marketing_consent": true,
+  TOOL     get_offer_limits: {"rules_version": 1, "allowed_offer_types": {"pct_off": "X% off on a product or category, above a minimum order value.", "flat_off": "Rs X o
+  TOOL     get_recent_activity: {"last_orders": [{"date": "2026-10-15", "paid_rupees": 827, "discount_rupees": 0, "status": "delivered", "items": ["Organica Snacks Plus (gr
+  TOOL     get_offer_history: {"response_by_offer_type": {"flat_off": {"sent": 3, "opened": 1, "redeemed": 1, "redeem_rate": 0.33}, "pct_off": {"sent": 1, "opened": 0, "r
+  TOOL     estimate_profit: {"offer": "reminder message (no discount)", "chance_to_buy_48h": {"without_offer": 0.022, "with_offer": 0.091}, "expected_order_value_rupees
+  TOOL     estimate_profit: {"offer": "free delivery (min order Rs 299)", "chance_to_buy_48h": {"without_offer": 0.022, "with_offer": 0.213}, "expected_order_value_rupe
+  TOOL     estimate_profit: {"offer": "10% off on product #137", "chance_to_buy_48h": {"without_offer": 0.022, "with_offer": 0.199}, "expected_order_value_rupees": 729,
+  TOOL     estimate_profit: {"offer": "Rs 100 off on product #137 (min order Rs 729)", "chance_to_buy_48h": {"without_offer": 0.022, "with_offer": 0.132}, "expected_ord
+  TOOL     propose_offer: approved: free delivery (min order Rs 299)
+  COST     17,759 input + 2,130 output tokens = $0.0857
+  RULES    20/20 checks passed outright
+  SAVED    decision #2
+
+=== points expiring ===   (33s total, API call times: [3.3, 6.5, 6.2, 2.8, 14.0])
+Customer #2259 Neha  |  trigger: manual  |  decided by: agent  |  status: WOULD_SEND  |  rules v1
+  OFFER    3x reward points, expires in 48h, send 23 Oct 21:06 IST
+  MESSAGE  Hi Neha, we've missed you! For the next 48 hours, earn 3x reward points on your grocery order – a great time to restock your favourite Organica Snacks Plus. Also, 302 of your points expire on 26 Oct, so you can use them on this order too.
+  WHY      Neha's ordering habit has broken (54 days since her last order; she usually orders every 18 days). Send a 3x reward points offer on grocery, her top category, valid 48h. It costs very little, keeps margin healthy, and fits with her 302 points that expire on 26 Oct.
+           - Usually orders every 18 days; last order 54.1 days ago (overdue ratio 3.01, status 'lapsed - habit broken')
+           - Habit strength 0.8, high-value customer, 18 orders, avg order ₹1,579
+           - Favourite category grocery (43% of spend); top item Organica Snacks Plus ordered 8 times
+           - Deal-seeker score 0.0 and discount dependence 0.0, so a discount isn't needed
+           - 302 points expiring 2026-10-26; points redeem rate 0
+           - Chance to buy in 48h without an offer: 3%
+           - Only 1 offer in last 30 days, none in last 7; 562h since last offer; not in quiet hours (21:06)
+  IMPACT   Chance to buy in 48h goes from 3% to 37.9%. Offer cost about ₹31, margin after offer 20.68%, expected profit about ₹113 over sending nothing.
+  ALSO     3x points sitewide: ₹175 expected profit, the highest. Rejected because for a habit break the playbook asks for an offer on a favourite category, and grocery is
+  ALSO     2x points sitewide: ₹90; 2x points on grocery: ₹59. Both lower than 3x grocery
+  ALSO     Reminder only (points expiry): ₹45 expected profit, chance to buy 3% -> 12%
+  ALSO     10% off grocery, min ₹499: ₹5, fails the ₹20 minimum profit (₹157 discount cost on thin grocery margin)
+  ALSO     10% off Organica Snacks Plus: ₹0, fails the margin floor
+  ALSO     10% off beauty, min ₹699: ₹24, low and needs real discount spend
+  WHY NOW  She is 3x past her usual gap, and 302 points expire on 26 Oct. The 48h window closes before that, so the points expiry is a real, honest reason to come back. It's 21:06, before quiet hours start at 22:00, and anti-spam limits are clear.
+  TOOL     get_customer_profile: {"customer_id": 2259, "first_name": "Neha", "city": "Delhi", "city_tier": 1, "age": 51, "language": "Hindi", "marketing_consent": true, "tel
+  TOOL     get_offer_limits: {"rules_version": 1, "allowed_offer_types": {"pct_off": "X% off on a product or category, above a minimum order value.", "flat_off": "Rs X o
+  TOOL     estimate_profit: {"offer": "reminder message (no discount)", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.117}, "expected_order_value_rupees"
+  TOOL     estimate_profit: {"offer": "10% off on grocery (min order Rs 499)", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.082}, "expected_order_value_
+  TOOL     estimate_profit: {"offer": "10% off on product #270", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.098}, "expected_order_value_rupees": 159, 
+  TOOL     estimate_profit: {"offer": "2x reward points", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.205}, "expected_order_value_rupees": 1579, "offer
+  TOOL     estimate_profit: {"offer": "3x reward points", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.379}, "expected_order_value_rupees": 1579, "offer
+  TOOL     estimate_profit: {"offer": "2x reward points", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.205}, "expected_order_value_rupees": 1579, "offer
+  TOOL     estimate_profit: {"offer": "10% off on beauty (min order Rs 699)", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.082}, "expected_order_value_r
+  TOOL     estimate_profit: {"offer": "3x reward points", "chance_to_buy_48h": {"without_offer": 0.03, "with_offer": 0.379}, "expected_order_value_rupees": 1579, "offer
+  TOOL     propose_offer: approved: 3x reward points
+  COST     31,558 input + 2,932 output tokens = $0.1062
+  RULES    20/20 checks passed outright
+  SAVED    decision #3
+
+=== regular, on track (buys anyway?) ===   (17s total, API call times: [2.6, 4.9, 9.7])
+Customer #128 Khushi  |  trigger: manual  |  decided by: agent  |  status: SCHEDULED  |  rules v1
+  OFFER    reminder message (no discount), expires in 48h, send 24 Oct 12:00 IST
+  MESSAGE  Hi Khushi! Just a friendly note: you have ₹684 sitting in your wallet. Use it on your next order, whether that's new jeans or your usual groceries and beauty picks.
+  WHY      Send a free reminder about her unused ₹684 wallet balance tomorrow at 12:00 IST. No discount, because she is on track with her habit and doesn't respond to deals.
+           - Usually orders every 11.9 days; last order 9.3 days ago (overdue ratio 0.78, status 'on track'), so no habit break
+           - No open cart; cart abandon rate 0
+           - Wallet balance ₹684, unused for 156 days
+           - Deal-seeker score 0.0, discount dependence 0.0
+           - Ignored all 4 past offers (flat_off, 2x points, 2 free deliveries)
+           - Chance to buy in 48h without an offer: 29.5%
+           - Usually shops around 12:00 IST; quiet hours start at 22:00
+           - High value: 30 orders, AOV ₹2,005
+  IMPACT   Chance to buy in 48h goes from 29.5% to 32.7%. Offer cost ₹0, expected profit +₹27 (meets the ₹20 minimum, margin 42.3%).
+  ALSO     2x points multiplier: expected profit ₹17, below the ₹20 minimum, and she ignored this type before
+  ALSO     Discount on fashion/jeans: she isn't overdue and has zero discount dependence, so it would mostly pay for orders she'd place anyway; past ₹150 fashion flat_off 
+  ALSO     Free delivery: ignored twice recently
+  ALSO     No offer: a reasonable choice, but the wallet reminder costs nothing and adds ₹27 expected profit
+  WHY NOW  Her usual reorder point is about 2.6 days away, so a gentle nudge fits her rhythm. The wallet money has sat idle for 156 days. The send is set for tomorrow 12:00, her usual shopping hour, to stay clear of the 22:00-08:00 quiet hours. Last offer was 9 days ago.
+  TOOL     get_customer_profile: {"customer_id": 128, "first_name": "Khushi", "city": "Mumbai", "city_tier": 1, "age": 34, "language": "English", "marketing_consent": true, 
+  TOOL     get_offer_limits: {"rules_version": 1, "allowed_offer_types": {"pct_off": "X% off on a product or category, above a minimum order value.", "flat_off": "Rs X o
+  TOOL     estimate_profit: {"offer": "reminder message (no discount)", "chance_to_buy_48h": {"without_offer": 0.295, "with_offer": 0.327}, "expected_order_value_rupees
+  TOOL     estimate_profit: {"offer": "2x reward points", "chance_to_buy_48h": {"without_offer": 0.295, "with_offer": 0.323}, "expected_order_value_rupees": 2005, "offe
+  TOOL     get_offer_history: {"response_by_offer_type": {"flat_off": {"sent": 1, "opened": 0, "redeemed": 0, "redeem_rate": 0.0}, "points_multiplier": {"sent": 1, "opene
+  TOOL     propose_offer: approved: reminder message (no discount)
+  COST     14,661 input + 1,540 output tokens = $0.0647
+  RULES    19/19 checks passed outright
+  SAVED    decision #4
+
+TOTAL COST: $0.3456 (~Rs 30)
+
