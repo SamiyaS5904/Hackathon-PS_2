@@ -117,3 +117,53 @@ Broken links between tables: **0**.
 
 **Next:** Session 2: analyst features (habit signals), profit math, rules store + checker, fallback +
 templates, gatekeeper + Day Plan, `decide.py` (fallback-only), rule tests.
+
+---
+
+## 2026-10-23: Session 2: Analyst, profit math, rules, fallback, gatekeeper, pipeline
+**Built:** the whole decision pipeline except the AI. Every decision is explained and logged.
+
+**Files:**
+- `engine/clock.py` (UTC storage / IST display, `OFFERPILOT_NOW` to freeze time), `engine/catalog.py`,
+  `engine/models.py` (pydantic `OfferProposal`, `RuleCheck`, `CheckResult`, `ProfitEstimate`)
+- `engine/features.py`: analyst profile (habit: usual gap, overdue ratio, habit strength/status; favourites;
+  shopping hour; browsing; open cart; deal-seeker score; wallet; points expiring; offer response; fatigue;
+  48h "buys anyway" chance)
+- `engine/profit.py`: expected profit vs sending nothing, offer costs, uplift heuristic, max amount for margin floor
+- `engine/rules_store.py`: rules versions, safety bounds, diff, `get_active_rules()`
+- `engine/rules.py`: the checker (approve / repair / reject) for all rule groups in CLAUDE.md section 4
+- `engine/fallback.py` + `config/templates.yaml`: 5-rule fallback table with fixed templates
+- `engine/gatekeeper.py`: free pre-filter, circuit breaker, Day Plan (AI decisions per day, capped by `.env`)
+- `engine/decide.py`: pipeline + command-line tool + `recheck_scheduled()` after rule edits
+- `harness/conftest.py`, `test_rules.py`, `test_rules_editing.py`, `test_fallback.py`: **67 tests, all passing**
+
+**How to run / check:**
+```bash
+python -m engine.decide --showcase --dry-run      # one example per situation, not saved
+python -m engine.decide --customer 42             # decide and save for one customer
+pytest harness/                                   # 67 tests, ~8 seconds
+```
+
+**What the showcase shows (no API key, so fallback decides):**
+- Habit broken, high value (48 days vs usual 10.5) -> 10% off favourite category; "favourite item" offer was tried
+  first but blocked: expected profit Rs 6 < Rs 20 minimum
+- Cart left 45h ago -> free delivery, expected profit Rs 145
+- Points expiring -> free reminder ("302 reward points will expire on 26 Oct")
+- Regular on track (26% buys-anyway chance) -> only a free wallet reminder, no discount
+- New customer -> send nothing (every option below the minimum profit)
+
+**Decisions & why:**
+- **Deal-seeker score** (share of orders placed during sales) added: discount dependence alone was ~0 for
+  almost everyone, so it couldn't separate deal hunters.
+- **"Buys anyway" chance fades fast once a customer is 1.3x overdue**: a broken habit means a low natural chance,
+  which is exactly when an offer can help.
+- **New offer type `reminder`** (zero cost) in `config/offers.yaml`, for the free nudges in CLAUDE.md 4.8 / agent
+  priority 3. The CLAUDE.md offer-type list should mention it (needs your OK to edit CLAUDE.md).
+- **Banned claims** list added to message rules ("guaranteed", "lowest price"...).
+- **Habit fallback uses a Rs 499 minimum order**: favourites are often cheap restock items; a discount on a Rs 99
+  item alone can't earn the minimum profit.
+- **Gatekeeper skips cost nothing**: logged as `decided_by = gatekeeper`, `status = nothing`, so the manager still
+  sees why a customer got nothing.
+- Uplift is still a heuristic (documented in `engine/profit.py`); a trained model replaces it in Session 7.
+
+**Next:** Session 3: AI agent (`engine/agent.py`) with tools, structured reasoning and the retry loop.

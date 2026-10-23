@@ -62,6 +62,13 @@ costly. Numbers like "churn risk" should be calculated the same way every time, 
 they buy, average spend, favourite categories, active hours, cart-abandon rate, how much they depend on discounts,
 how they reacted to past offers, wallet balance, points expiring soon, offers received recently (fatigue).
 
+Two signals are worth explaining:
+- **Deal-seeker score:** about 20% of days are sale days, so a normal shopper places ~20% of orders in sales.
+  Someone placing 60%+ of orders during sales is clearly waiting for deals, so discounts move them more.
+- **"Buys anyway" chance (next 48h, no offer):** high when a regular customer reaches their usual gap, and it
+  fades fast once they're well past it (their habit is breaking). That's why an overdue regular is the best
+  moment for an offer, and a customer who's due today is a bad one (they'd buy anyway).
+
 ---
 
 ## 5. Why a simulator
