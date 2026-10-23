@@ -29,7 +29,7 @@ from engine.rules import RuleState, check_offer
 from engine.rules_store import ActiveRules
 
 EXPIRY_HOURS = 48
-MAX_PASSING_SHOWN = 8   # best allowed candidates given to the AI
+MAX_PASSING_SHOWN = 9   # best allowed candidates given to the AI
 MAX_BLOCKED_SHOWN = 3   # plus a few blocked ones, so the AI knows why obvious ideas are off the table
 
 
@@ -68,6 +68,15 @@ def _ideas(profile: CustomerProfile, catalog: Catalog, rules: ActiveRules) -> li
         add(f"10% off cart item ({item['name']})", offer_type="pct_off",
             amount=float(min(10, caps[item["category"]])), product_id=item["product_id"],
             min_order_rupees=item["price_rupees"])
+    # What they've been looking at: searched for, viewed repeatedly, wishlisted (the most personal offer there is)
+    already = {pid for _, o in ideas if (pid := o.product_id)}
+    for item in profile.intent_products[:2]:
+        if item["product_id"] in already:
+            continue
+        add(f"10% off {item['name']} ({', '.join(item['signals'])})", offer_type="pct_off",
+            amount=float(min(10, caps[item["category"]])), product_id=item["product_id"],
+            min_order_rupees=item["price_rupees"])
+        already.add(item["product_id"])
     if top_category:
         cap = caps[top_category]
         add(f"10% off {top_category}", offer_type="pct_off", amount=float(min(10, cap)), category=top_category,
