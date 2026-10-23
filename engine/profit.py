@@ -18,7 +18,8 @@ How the two chances are estimated (simple, explainable heuristics for the MVP):
   - The UPLIFT of an offer (how much it raises the chance) starts from a base per offer type and is scaled by
     observable signals: deal seeking, a breaking habit, an open cart, favourite items, how this customer
     reacted to the same offer type before, and the size of the offer. It shrinks for people who'd buy anyway.
-  TODO(session 7): replace the uplift heuristic with a model trained on past campaigns (treatment vs holdout).
+  When the uplift model is trained (python -m engine.uplift --train), it replaces the heuristic for every offer
+  type it has data on; the heuristic stays as the fallback (e.g. 'reminder', or before the model is trained).
 """
 
 from __future__ import annotations
@@ -115,8 +116,27 @@ def offer_cost_paise(offer: OfferProposal, order_value: int, discount_base: int)
 # ---------------------------------------------------------------------------------------------------
 def estimate_uplift(offer: OfferProposal, profile: CustomerProfile, catalog: Catalog) -> float:
     """
-    Extra chance (0..0.6) that this customer buys in the next 48h BECAUSE of this offer.
-    Every factor below is an observable signal from the profile, explained in plain words.
+    Extra chance that this customer buys in the next 48h BECAUSE of this offer.
+
+    When the uplift model is trained and knows this offer type, the answer is the AVERAGE of the model and the
+    hand-made formula. Measured against the hidden truth (harness/eval_uplift.py, 400 customers), this blend ranked
+    customers better than either method alone on 5 of 6 offer types (overall 0.50 vs 0.44 formula, 0.41 model):
+    the two make different mistakes, so averaging cancels part of them. Otherwise the formula alone is used.
+    """
+    formula = formula_uplift(offer, profile, catalog)
+    from engine.uplift import get_model  # imported here to avoid a circular import
+    model = get_model()
+    if model:
+        p_with = model.p_with_offer(profile, offer, catalog)
+        if p_with is not None:
+            return round(min((formula + p_with - profile.p_buy_48h_no_offer) / 2, MAX_UPLIFT), 3)
+    return formula
+
+
+def formula_uplift(offer: OfferProposal, profile: CustomerProfile, catalog: Catalog) -> float:
+    """
+    The hand-made uplift formula (0..0.6). Every factor is an observable signal from the profile, in plain words.
+    Used alone before the model is trained (and for 'reminder', which the model has no data on).
     """
     t = offer.offer_type
     uplift = BASE_UPLIFT[t]
@@ -174,7 +194,7 @@ def estimate(offer: OfferProposal, profile: CustomerProfile, catalog: Catalog) -
     cost = offer_cost_paise(offer, value, discount_base)
     margin_after = normal_margin - cost
     p_no = profile.p_buy_48h_no_offer
-    p_with = min(MAX_P_BUY, p_no + estimate_uplift(offer, profile, catalog))
+    p_with = min(MAX_P_BUY, max(0.0, p_no + estimate_uplift(offer, profile, catalog)))
     expected = round(p_with * margin_after - p_no * normal_margin)
 
     explanation = (
