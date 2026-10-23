@@ -41,6 +41,20 @@ def no_real_api_key(monkeypatch):
     monkeypatch.setattr(engine.agent, "settings", no_key)
 
 
+@pytest.fixture(autouse=True)
+def heuristics_not_trained_model(monkeypatch):
+    """
+    Tests use the fixed hand-made formulas, not the trained uplift model, so results never change when the model
+    is retrained. The model has its own tests (harness/test_uplift.py) and evaluation (harness/eval_uplift.py).
+    """
+    import engine.uplift
+
+    monkeypatch.setenv("USE_UPLIFT_MODEL", "0")
+    engine.uplift.get_model.cache_clear()
+    yield
+    engine.uplift.get_model.cache_clear()
+
+
 @pytest.fixture
 def now() -> datetime:
     return NOON_IST

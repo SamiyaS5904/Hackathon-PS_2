@@ -14,7 +14,7 @@ from engine.clock import to_ist
 from engine.rules import RuleState, check_offer
 from harness.conftest import make_profile, offer
 
-GOOD_MESSAGE = "Hi Riya! Get 15% off on fashion above ₹999 today."
+GOOD_MESSAGE = "Hi Riya! Get 15% off on fashion above ₹999."
 
 
 def run(o, profile, catalog, rules, state, now, **kw):
@@ -67,7 +67,7 @@ def test_zero_amount_rejected(profile, catalog, rules, state, now):
 
 def test_product_offer_takes_product_category(profile, catalog, rules, state, now):
     o = good_offer(product_id=2, category="electronics", amount=10,
-                   message="Hi Riya! Get 10% off your Kurta above ₹999 today.")
+                   message="Hi Riya! Get 10% off your Kurta above ₹999.")
     res = run(o, profile, catalog, rules, state, now)
     assert res.ok, res.failures
     assert res.offer.category == "fashion"
@@ -154,7 +154,7 @@ def test_category_cap_with_renderer_is_repaired_and_sent(profile, catalog, rules
 
 
 def test_discount_at_cap_passes(profile, catalog, rules, state, now):
-    res = run(good_offer(amount=30, message="Hi Riya! Get 30% off on fashion above ₹999 today."),
+    res = run(good_offer(amount=30, message="Hi Riya! Get 30% off on fashion above ₹999, valid for 24 hours."),
               profile, catalog, rules, state, now)
     assert result_of(res, "profit.category_cap") == "passed"
 

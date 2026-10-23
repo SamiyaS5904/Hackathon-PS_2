@@ -90,7 +90,7 @@ def offer_input(**overrides) -> dict:
     """A complete propose_offer / estimate_profit input (strict schemas need every field)."""
     data = {"offer_type": "pct_off", "amount": 15, "product_id": None, "category": "fashion",
             "min_order_rupees": 999, "expiry_hours": 24, "send_at_ist": None,
-            "message": "Hi Riya! Get 15% off on fashion above ₹999 today.", "reasoning": REASONING}
+            "message": "Hi Riya! Get 15% off on fashion above ₹999, valid for 24 hours.", "reasoning": REASONING}
     data.update(overrides)
     return data
 
