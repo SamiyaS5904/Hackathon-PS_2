@@ -101,6 +101,12 @@ message:
     - "ending soon"
     - "act now"
     - "don't miss out"
+  banned_claims:                       # claims we can't back up with catalog data -> reject
+    - "guaranteed"
+    - "lowest price"
+    - "best price ever"
+    - "free gift"
+    - "100% original"
 
 # -----------------------------------------------------------------------------------------------------
 # SAFETY BOUNDS FOR EDITS (the Rules page refuses values outside these, so an edit can't lose money)
