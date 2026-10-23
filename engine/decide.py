@@ -1,0 +1,261 @@
+"""
+The decision pipeline: one call takes a customer + a trigger and produces a fully explained, logged decision.
+
+Where it sits: the conductor of STEPS 2-6.
+    decide() -> features (profile) -> gatekeeper (skip / agent / fallback) -> agent or fallback
+             -> rules checker -> status (would_send / queued / scheduled / nothing / blocked) -> decisions table
+
+Run it from the command line:
+    python -m engine.decide --customer 42                 # decide for customer 42 and save it
+    python -m engine.decide --customer 42 --dry-run       # show the decision without saving
+    python -m engine.decide --showcase                    # one example per situation (habit break, cart, ...)
+    python -m engine.decide --showcase --no-agent         # force the free fallback
+
+Status meanings (shown on the dashboard):
+  would_send - approved; customer has no Telegram linked, so it's recorded as "would send"
+  queued     - approved; customer is a linked tester, the bot will deliver it (Session 4)
+  scheduled  - approved; send time is later (e.g. moved out of quiet hours)
+  nothing    - deliberately sent nothing (gatekeeper skip, or no offer worth it)
+  blocked    - the AI's proposals kept breaking the rules and nothing could be sent
+  cancelled  - a scheduled offer that failed a re-check after the rules changed
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import sqlite3
+import sys
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+
+from db.store import connect
+from engine.catalog import Catalog, load_catalog
+from engine.clock import now_utc, parse_ts, to_ist, to_ts
+from engine.fallback import fallback_decide
+from engine.features import CustomerProfile, build_profile
+from engine.gatekeeper import screen
+from engine.models import CheckResult, OfferProposal
+from engine.rules import check_offer, load_rule_state
+from engine.rules_store import get_active_rules
+
+
+@dataclass
+class DecisionOutcome:
+    """Everything about one decision, as saved in the `decisions` table."""
+
+    customer_id: int
+    first_name: str
+    trigger_type: str
+    decided_by: str                          # 'agent' | 'fallback' | 'gatekeeper'
+    status: str
+    offer: OfferProposal | None
+    reasoning: dict
+    rule_checks: list[dict]
+    expected_profit_paise: int | None
+    offer_cost_paise: int | None
+    rules_version: int
+    proposal: dict | None = None             # what was first proposed (before repairs)
+    tool_trace: list[dict] = field(default_factory=list)
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_usd: float | None = None
+    decision_id: int | None = None
+    created_at: str = ""
+
+
+def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manual",
+           trigger_detail: dict | None = None, now: datetime | None = None, use_agent: bool = True,
+           dry_run: bool = False, catalog: Catalog | None = None) -> DecisionOutcome:
+    """Make, explain and (unless dry_run) save one decision for one customer."""
+    now = now or now_utc()
+    catalog = catalog or load_catalog(conn)
+    rules = get_active_rules(conn)
+    profile = build_profile(conn, customer_id, now, catalog)
+    state = load_rule_state(conn, customer_id, rules, now)
+    gate = screen(conn, profile, rules, state, now, trigger_type, want_agent=use_agent)
+
+    if gate.route == "skip":
+        outcome = DecisionOutcome(
+            customer_id, profile.first_name, trigger_type, "gatekeeper", "nothing", None,
+            reasoning={"summary": f"Skipped before any offer was considered: {gate.reason}",
+                       "signals_used": [], "alternatives_considered": [],
+                       "expected_impact": "No cost; no AI call spent.", "why_now": gate.reason},
+            rule_checks=[], expected_profit_paise=None, offer_cost_paise=None, rules_version=rules.version)
+    else:
+        why_fallback = gate.reason
+        if gate.route == "agent":
+            # TODO(session 3): call engine.agent here; if it returns an approved offer, use it.
+            why_fallback = "the AI agent is not connected yet (Session 3)"
+        outcome = _fallback_outcome(profile, catalog, rules, state, now, trigger_type, why_fallback)
+
+    outcome.created_at = to_ts(now)
+    if not dry_run:
+        outcome.decision_id = _save(conn, outcome, trigger_detail)
+    return outcome
+
+
+def _fallback_outcome(profile: CustomerProfile, catalog: Catalog, rules, state, now: datetime,
+                      trigger_type: str, why_fallback: str) -> DecisionOutcome:
+    result = fallback_decide(profile, catalog, rules, state, now, why_fallback)
+    reasoning = {**result.reasoning, "fallback_rules_tried": result.tried}
+    check = result.check
+    return DecisionOutcome(
+        profile.customer_id, profile.first_name, trigger_type, "fallback",
+        _delivery_status(check, profile, now),
+        check.offer if check else None,
+        reasoning=reasoning,
+        rule_checks=[c.model_dump() for c in check.checks] if check else [],
+        expected_profit_paise=check.profit.expected_profit_paise if check and check.profit else None,
+        offer_cost_paise=check.profit.offer_cost_paise if check and check.profit else None,
+        rules_version=rules.version,
+        proposal=result.candidate.offer.model_dump(mode="json") if result.candidate else None,
+    )
+
+
+def _delivery_status(check: CheckResult | None, profile: CustomerProfile, now: datetime) -> str:
+    """Approved offer -> scheduled (later), queued (linked tester) or would_send. No offer -> nothing."""
+    if check is None or not check.ok:
+        return "nothing"
+    if check.offer.send_at and check.offer.send_at > now + timedelta(minutes=1):
+        return "scheduled"
+    return "queued" if profile.telegram_linked else "would_send"
+
+
+def _save(conn: sqlite3.Connection, o: DecisionOutcome, trigger_detail: dict | None) -> int:
+    offer = o.offer
+    cur = conn.execute("""
+        INSERT INTO decisions (customer_id, created_at, trigger_type, trigger_detail, decided_by, status, proposal,
+            final_offer, message, send_at, reasoning, rule_checks, expected_profit_paise, offer_cost_paise,
+            rules_version, tool_trace, input_tokens, output_tokens, cost_usd)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+        o.customer_id, o.created_at, o.trigger_type, json.dumps(trigger_detail) if trigger_detail else None,
+        o.decided_by, o.status, json.dumps(o.proposal) if o.proposal else None,
+        offer.model_dump_json() if offer else None, offer.message if offer else None,
+        to_ts(offer.send_at) if offer and offer.send_at else None,
+        json.dumps(o.reasoning), json.dumps(o.rule_checks), o.expected_profit_paise, o.offer_cost_paise,
+        o.rules_version, json.dumps(o.tool_trace) if o.tool_trace else None,
+        o.input_tokens, o.output_tokens, o.cost_usd))
+    conn.commit()
+    return cur.lastrowid
+
+
+def recheck_scheduled(conn: sqlite3.Connection, now: datetime | None = None) -> list[dict]:
+    """
+    Re-check every offer that is decided but not sent yet, against the CURRENT rules version.
+    Called after the marketing team saves new rules (CLAUDE.md 4.0: "offers get revised when rules change").
+    Still fine -> keeps its place with the new version recorded. Now breaks a rule -> repaired or cancelled.
+    """
+    now = now or now_utc()
+    catalog, rules = load_catalog(conn), get_active_rules(conn)
+    report = []
+    for row in conn.execute("SELECT * FROM decisions WHERE status = 'scheduled' AND send_at > ?",
+                            (to_ts(now),)).fetchall():
+        offer = OfferProposal.model_validate_json(row["final_offer"])
+        profile = build_profile(conn, row["customer_id"], now, catalog)
+        state = load_rule_state(conn, row["customer_id"], rules, now, exclude_decision_id=row["id"])
+        check = check_offer(offer, profile, catalog, rules, state, now)
+        reasoning = json.loads(row["reasoning"])
+        if check.ok:
+            conn.execute("UPDATE decisions SET final_offer = ?, rule_checks = ?, rules_version = ?, "
+                         "offer_cost_paise = ?, expected_profit_paise = ? WHERE id = ?",
+                         (check.offer.model_dump_json(), json.dumps([c.model_dump() for c in check.checks]),
+                          rules.version, check.profit.offer_cost_paise, check.profit.expected_profit_paise, row["id"]))
+            report.append({"decision_id": row["id"], "result": "still valid", "rules_version": rules.version})
+        else:
+            reasoning["cancelled_note"] = (f"Cancelled before sending: rules version {rules.version} no longer allows "
+                                           f"it ({'; '.join(check.failures)}).")
+            conn.execute("UPDATE decisions SET status = 'cancelled', reasoning = ?, rule_checks = ?, rules_version = ? "
+                         "WHERE id = ?", (json.dumps(reasoning), json.dumps([c.model_dump() for c in check.checks]),
+                                          rules.version, row["id"]))
+            report.append({"decision_id": row["id"], "result": "cancelled", "reasons": check.failures})
+    conn.commit()
+    return report
+
+
+# ---------------------------------------------------------------------------------------------------
+# Command line
+# ---------------------------------------------------------------------------------------------------
+def format_decision(o: DecisionOutcome) -> str:
+    """Readable report of a decision, the same information the dashboard will show."""
+    lines = [f"Customer #{o.customer_id} {o.first_name}  |  trigger: {o.trigger_type}  |  decided by: {o.decided_by}"
+             f"  |  status: {o.status.upper()}  |  rules v{o.rules_version}"]
+    if o.offer:
+        send = to_ist(o.offer.send_at).strftime("%d %b %H:%M IST") if o.offer.send_at else "now"
+        lines += [f"  OFFER    {o.offer.describe()}, expires in {o.offer.expiry_hours}h, send {send}",
+                  f"  MESSAGE  {o.offer.message}"]
+    r = o.reasoning
+    lines.append(f"  WHY      {r.get('summary', '')}")
+    for s in r.get("signals_used", []):
+        lines.append(f"           - {s}")
+    if r.get("expected_impact"):
+        lines.append(f"  IMPACT   {r['expected_impact']}")
+    if r.get("decided_by_note"):
+        lines.append(f"  NOTE     {r['decided_by_note']}")
+    for a in r.get("alternatives_considered", []):
+        lines.append(f"  ALSO     {a[:160]}")
+    for c in o.rule_checks:
+        if c["result"] != "passed":
+            lines.append(f"  RULE     [{c['result']}] {c['rule']}: {c['detail'][:160]}")
+    if o.rule_checks:
+        passed = sum(1 for c in o.rule_checks if c["result"] == "passed")
+        lines.append(f"  RULES    {passed}/{len(o.rule_checks)} checks passed outright")
+    if o.decision_id:
+        lines.append(f"  SAVED    decision #{o.decision_id}")
+    return "\n".join(lines)
+
+
+SHOWCASE = [
+    ("habit breaking", lambda p: (p.overdue_ratio or 0) >= 1.5 and p.total_orders >= 5),
+    ("cart left behind", lambda p: p.open_cart is not None),
+    ("points expiring", lambda p: p.points_expiring_7d > 0),
+    ("regular, on track (buys anyway?)", lambda p: p.habit_status in ("on track", "due now") and p.total_orders >= 15),
+    ("new customer", lambda p: p.total_orders <= 1),
+]
+
+
+def pick_showcase(conn: sqlite3.Connection, catalog: Catalog, now: datetime, seed: int = 7) -> list[tuple[str, int]]:
+    """Find one customer for each situation, using only observable profiles (never the hidden personas)."""
+    ids = [r[0] for r in conn.execute("SELECT id FROM customers WHERE marketing_consent = 1")]
+    random.Random(seed).shuffle(ids)
+    found: dict[str, int] = {}
+    for cid in ids[:400]:
+        profile = build_profile(conn, cid, now, catalog)
+        for label, matches in SHOWCASE:
+            if label not in found and matches(profile):
+                found[label] = cid
+                break
+        if len(found) == len(SHOWCASE):
+            break
+    return [(label, found[label]) for label, _ in SHOWCASE if label in found]
+
+
+def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # so Rs symbol and emoji print on Windows terminals
+    parser = argparse.ArgumentParser(description="Make an offer decision for one or more customers.")
+    parser.add_argument("--customer", type=int, action="append", help="customer id (can repeat)")
+    parser.add_argument("--showcase", action="store_true", help="one example customer per situation")
+    parser.add_argument("--trigger", default="manual")
+    parser.add_argument("--no-agent", action="store_true", help="force the free fallback rules")
+    parser.add_argument("--dry-run", action="store_true", help="show the decision but don't save it")
+    parser.add_argument("--now", type=parse_ts, help="pretend it's this time (UTC, e.g. 2026-10-23T06:30:00Z)")
+    args = parser.parse_args()
+
+    conn = connect()
+    catalog = load_catalog(conn)
+    now = args.now or now_utc()
+    targets = [("requested", c) for c in (args.customer or [])]
+    if args.showcase:
+        targets += pick_showcase(conn, catalog, now)
+    if not targets:
+        parser.error("give --customer ID or --showcase")
+    for label, cid in targets:
+        outcome = decide(conn, cid, args.trigger, now=now, use_agent=not args.no_agent, dry_run=args.dry_run,
+                         catalog=catalog)
+        print(f"\n=== {label} ===")
+        print(format_decision(outcome))
+
+
+if __name__ == "__main__":
+    main()
