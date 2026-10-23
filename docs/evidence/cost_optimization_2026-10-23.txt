@@ -1,0 +1,79 @@
+COST OPTIMIZATION RUN (same 4 customers, same moment as the first real run, dry run - nothing saved)
+Changes: profile + limits in the first message, ideas checked in one turn, compact JSON, tighter reasoning.
+
+
+=== #648 Mansi: 3x reward points  | calls 2 [8.5, 9.9] | 18s | $0.0702 | in 11,458 (cache read 4,755, write 6,697) out 1,788
+  MESSAGE: Hi Mansi, we've missed you! Earn 3x reward points on your next home order over the next 48 hours. Your ₹2278 wallet balance is ready to use too. Happy shopping!
+  WHY: Send Mansi 3x reward points on her next home order, valid 48h, at 16:00 IST tomorrow. She's a high-value regular whose habit has broken, and this cheap offer earns the most expected profit.
+   - Usually orders every 10.5 days; last order 48 days ago (overdue ratio 4.6, habit broken)
+   - Chance to buy in 48h without an offer: 0.2%
+   - Home is 42% of her spend; Homely Bedsheet Prime ordered 10 times
+   - Points redeem rate 0.88 and deal-seeker score 0.0, so points work and discounts aren't needed
+   - ₹2278 wallet balance unused for 13 days
+   - Usual shopping hour 16:00; it's 21:06 now, close to quiet hours (22:00-08:00)
+   ALSO: ₹150 off home over ₹1000: expected profit ₹32, costs ₹150
+   ALSO: 10% off Homely Bedsheet Prime: expected profit ₹25
+   ALSO: Free wallet/re-engagement reminder: expected profit ₹28, smaller lift (0.2% to 4.7%)
+   ALSO: No offer: about ₹0, the habit stays broken
+  IMPACT: Chance to buy in 48h goes from 0.2% to 12.2%. Offer costs ₹33 per order. Expected profit is ₹69, the highest of the options.
+  WHY NOW: She's 4.6x past her usual order gap and hasn't had an offer in 9 days. Sending at her usual 16:00 shopping hour avoids tonight's quiet hours.
+
+=== #1790 Aarohi: free delivery (min order Rs 299)  | calls 2 [7.8, 8.7] | 16s | $0.0707 | in 11,719 (cache read 4,886, write 6,827) out 1,776
+  MESSAGE: Hi Aarohi, your Mira Lipstick Plus is still waiting in your cart! Enjoy free delivery on orders above ₹299 for the next 48 hours. You also have ₹1099 in your wallet to use.
+  WHY: Send a free-delivery offer (min ₹299, 48h) tied to the Mira Lipstick Plus left in her cart, at her usual shopping hour tomorrow. It earns the most profit of the options checked.
+   - Open cart: Mira Lipstick Plus ₹729, left 54 hours ago
+   - Mira Lipstick Plus is a favourite item, ordered 6 times
+   - Habit on track: last order 8.3 days ago, usually orders every 19.9 days (overdue ratio 0.42)
+   - Chance to buy in 48h without an offer: 2.2%
+   - Low deal seeker (0.12), discount dependence 0.05; idle wallet balance ₹1099
+   - Usually shops at 14:00 IST; quiet hours start at 22:00
+   ALSO: 10% off Mira Lipstick Plus: expected profit ₹54, below free delivery and costs more margin
+   ALSO: Reminder only (cart + wallet): expected profit ₹27
+   ALSO: 2x points: expected profit ₹21
+   ALSO: No offer: she isn't overdue, but there's only a 2.2% chance she buys without one, and the abandoned cart is worth recovering
+  IMPACT: Chance to buy in 48h goes from 2.2% to 21.3%. Offer cost ₹40, margin after offer 48.3%, expected profit ₹66.
+  WHY NOW: The cart has been sitting for 2+ days. Sending at her usual 14:00 shopping time tomorrow avoids tonight's quiet hours (they start at 22:00).
+
+=== #2259 Neha: reminder message (no discount)  | calls 2 [8.7, 12.9] | 22s | $0.0722 | in 11,536 (cache read 4,777, write 6,753) out 1,874
+  MESSAGE: Hi Neha, we've missed you! 302 of your reward points expire on 26 Oct, and you have ₹100 waiting in your wallet. A good time to restock your favourite Organica Snacks Plus and more.
+  WHY: Send a free reminder about Neha's 302 expiring points and ₹100 idle wallet balance, mentioning her favourite snacks, tomorrow at 19:00 IST. It is the most profitable option and costs nothing.
+   - Habit broken: usually orders every 18 days; last order 54 days ago (3.0x overdue)
+   - 302 points expire 2026-10-26 ~19:30 IST; points redeem rate 0
+   - ₹100 wallet balance idle for 285 days
+   - Deal-seeker score 0 and discount dependence 0, so discounts add little
+   - 3% chance to buy in 48h without an offer; usually shops around 19:00 IST
+   ALSO: 10% off grocery, min ₹499: expected profit ₹5, below the ₹20 minimum
+   ALSO: ₹50 off grocery, min ₹500: expected profit ₹6, below the minimum
+   ALSO: 15% off Aurae Serum Lite: expected profit ₹20, just at the minimum, costs ₹113 per order
+   ALSO: Send nothing: misses a free win-back while points are about to expire
+  IMPACT: Chance to buy in 48h goes from 3% to 11.7%. Expected profit ₹46 at no offer cost.
+  WHY NOW: Her points expire in under 3 days and her habit is broken. Sending at her usual 19:00 shopping hour tomorrow avoids quiet hours, and the reminder runs until just before the points expire.
+
+=== #128 Khushi: reminder message (no discount)  | calls 2 [8.3, 8.4] | 17s | $0.0672 | in 11,707 (cache read 4,876, write 6,825) out 1,601
+  MESSAGE: Hi Khushi! Just a friendly note: you have ₹684 sitting in your wallet. Use it on your next order, whether that's new jeans, your atta or your hair oil. Happy shopping!
+  WHY: Send a free reminder about her unused ₹684 wallet balance tomorrow at 12:00 IST. She is on track and doesn't chase deals, so a discount would only cost money.
+   - Usually orders every 11.9 days; last order 9.3 days ago (overdue ratio 0.78, on track)
+   - Deal-seeker score 0.0, discount dependence 0.0
+   - Wallet balance ₹684, unused for 156 days
+   - Chance to buy in 48h with no offer: 29.5%
+   - Usually shops around 12:00 IST; quiet hours start at 22:00
+   ALSO: 2x points: ₹21 expected profit, lower than the reminder and costs ₹20
+   ALSO: Free delivery over ₹299: ₹8, below the ₹20 minimum
+   ALSO: 10% off StreetFox Jeans Lite: -₹17, loses money
+   ALSO: No offer: ₹0, but the free wallet nudge adds ₹27
+  IMPACT: Chance to buy in 48h goes from 29.5% to 32.7%. Expected profit ₹27 at no cost.
+  WHY NOW: Her usual reorder point is about 2.6 days away and the wallet balance has sat unused for 156 days. Sending at her usual noon shopping time avoids tonight's quiet hours.
+
+COMPARISON (before -> after)
+  #648: cost $0.0890 -> $0.0702 (-21%) | time 43s -> 18s | calls 4 -> 2
+  #1790: cost $0.0857 -> $0.0707 (-18%) | time 22s -> 16s | calls 3 -> 2
+  #2259: cost $0.1062 -> $0.0722 (-32%) | time 33s -> 22s | calls 5 -> 2
+  #128: cost $0.0647 -> $0.0672 (+4%) | time 17s -> 17s | calls 3 -> 2
+  TOTAL: $0.3456 -> $0.2802 (-19%)  ~Rs 30 -> Rs 25
+
+
+FOLLOW-UP FIX (prompt: always compare the cheap options too, 4-6 ideas per turn) - Neha re-run:
+Neha: 3x reward points | calls 2 | 26s | $0.0828
+MESSAGE: Hi Neha, we've missed you! Get 3x reward points on your next grocery order, like your favourite Organica Snacks Plus. Also, 302 of your points expire on 26 Oct, so you can use them on this order too.
+ALSO: 2x points: Rs 59 | Reminder only: Rs 46 | 10% off grocery: Rs 5 (below minimum) | Free delivery: Rs 15 (below minimum) | 15% off serum: Rs 20
+IMPACT: Chance to buy in 48h 3% -> 37.9%. Offer cost ~Rs 31; expected profit Rs 113. Ideas checked: 6.
