@@ -156,6 +156,7 @@ def check_offer(
     state: RuleState,
     now: datetime,
     message_renderer: Callable[[OfferProposal], str] | None = None,
+    check_message: bool = True,
 ) -> CheckResult:
     """
     Check one proposal against every rule. Returns the final (possibly repaired) offer, the full list of checks,
@@ -165,6 +166,9 @@ def check_offer(
     repair (e.g. amount lowered) the message is re-rendered and always matches. The agent writes its own
     message, so for the agent a repaired amount means the message no longer matches -> rejected, and the agent
     is asked to rewrite it.
+
+    `check_message=False` skips only the message rules: used to pre-price candidate offers (engine/candidates.py)
+    before any message exists. A real proposal is always checked in full.
     """
     report = _Report()
     offer = proposal.model_copy(deep=True)
@@ -365,8 +369,9 @@ def check_offer(
     # 11. MESSAGE SAFETY
     if message_renderer:
         offer.message = message_renderer(offer)
-    for rule, ok, detail in _message_checks(offer, product, profile, rules):
-        (report.passed if ok else report.failed)(rule, detail)
+    if check_message:
+        for rule, ok, detail in _message_checks(offer, product, profile, rules):
+            (report.passed if ok else report.failed)(rule, detail)
 
     if report.has_failure:
         return result("rejected", est)
