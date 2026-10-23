@@ -1,0 +1,29 @@
+# =====================================================================================================
+# FALLBACK MESSAGE TEMPLATES (no AI)
+# -----------------------------------------------------------------------------------------------------
+# Used by engine/fallback.py when the AI agent is not used (no API key, today's AI plan used up, API error,
+# timeout, or the agent's proposal was rejected twice).
+#
+# {placeholders} are filled by CODE from the real, already-checked offer, so the message always matches the
+# offer exactly. No fake urgency, no claims we can't back up. Full table: CLAUDE.md section 4.8.
+# =====================================================================================================
+
+habit_favourite:
+  message: "Hi {first_name}! Time to restock your favourite {product_name}? Get {discount} off today, valid till {expiry}."
+  summary: "Habit is breaking: {first_name} usually orders every {usual_gap} days but it has been {days_since} days. Offered {discount} off their favourite {product_name}."
+
+cart_free_delivery:
+  message: "Hi {first_name}, your {product_name} is still in your cart. Get FREE delivery on orders above {min_order}, valid till {expiry}."
+  summary: "Cart left {cart_hours} hours ago (worth {cart_value}). Offered free delivery to help them finish the order."
+
+comeback_category:
+  message: "We miss you, {first_name}! Here's {discount} off on {category} (min order {min_order}), valid till {expiry}."
+  summary: "High-value customer inactive for {days_since} days. Offered {discount} off their favourite category ({category})."
+
+points_expiring:
+  message: "Hi {first_name}, {points} reward points will expire on {points_expiry_date}. Use them on your next order!"
+  summary: "{points} reward points expire on {points_expiry_date}. A free reminder (no discount, no cost)."
+
+wallet_reminder:
+  message: "Hi {first_name}, you have {wallet_balance} in your wallet. Use it on your next order!"
+  summary: "{wallet_balance} sitting unused in the wallet for {wallet_idle} days. A free reminder (no discount, no cost)."
