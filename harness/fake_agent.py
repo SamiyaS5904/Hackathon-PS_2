@@ -96,7 +96,8 @@ def offer_input(**overrides) -> dict:
 
 
 def estimate_input(**overrides) -> dict:
-    data = offer_input(**overrides)
+    """estimate_profit takes a LIST of ideas (up to 6); this builds a one-idea list."""
+    idea = offer_input(**overrides)
     for key in ("send_at_ist", "message", "reasoning"):
-        data.pop(key, None)
-    return data
+        idea.pop(key, None)
+    return {"ideas": [idea]}
