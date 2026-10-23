@@ -214,3 +214,39 @@ used-up Day Plan never calls the AI.
 
 **Next:** with the key: 4 real decisions to check reasoning quality. Then Session 4: Telegram bot + simulator
 (needs a bot token from @BotFather).
+
+---
+
+## 2026-10-23: Session 3 check: first 4 real AI decisions (Claude Opus 5.5)
+**What ran:** one customer per situation, real API, decisions saved as #1-#4. Full output:
+[docs/evidence/real_agent_run_2026-10-23.txt](docs/evidence/real_agent_run_2026-10-23.txt). For this test only,
+the timeout was 45s (`AGENT_TIMEOUT_SECONDS=45`) to measure real speed.
+
+| Situation | AI decision | Expected profit | Calls / time | Cost |
+|---|---|---|---|---|
+| Habit broken, high value (Mansi, 4.6x overdue) | 3x points on home + wallet mention, sent tomorrow 16:00 (her usual hour) | Rs 69 | 4 / 43s | $0.089 |
+| Cart left 54h ago (Aarohi, lipstick = favourite) | Free delivery, sent tomorrow 14:00 | Rs 66 | 3 / 22s | $0.086 |
+| Lapsed + 302 points expiring (Neha) | 3x points on grocery, mentions expiring points | Rs 113 | 5 / 33s | $0.106 |
+| Regular on track, 30% buys-anyway (Khushi) | Free wallet reminder only, **no discount** | Rs 27 | 3 / 17s | $0.065 |
+
+**Total: $0.35 (~Rs 30), average $0.086 per decision**, matching the estimate in reasoning.md §17.
+
+**Quality review:**
+- The AI used the tools well: compared 3-6 options with `estimate_profit` before deciding, and chose the
+  cheapest offer that works (points / free delivery / reminder) over discounts, as the prompt asks.
+- Reasoning is specific and checkable: real values ("48.3 days vs usual 10.5", "ignored all 6 past offers",
+  "searched 'bedsheet' twice", "last order was returned"), every alternative with its profit.
+- It scheduled sends at each customer's usual shopping hour, to avoid starting right before quiet hours.
+- Correct "no discount" for the regular customer who'd likely buy anyway.
+- All 4 passed every rule check (19-20/20) with no repairs needed.
+
+**Issues found:**
+1. **Timeout:** 4 of 16 API calls took 11.5-15.1s. With the CLAUDE.md 10s limit, 3 of 4 decisions would have
+   failed over to the fallback. **Proposal: 30s per call** (needs approval to change CLAUDE.md).
+2. **Points multiplier looks very attractive** in the uplift heuristic (Neha: 3% -> 38% chance to buy), so the AI
+   picked 3x points twice. It's within the hidden-truth range for points collectors, but the Session 7 model
+   should calibrate it. Watch item, no change now.
+3. For Neha the AI chose 3x points on grocery (Rs 113) over 3x points sitewide (Rs 175), following the
+   "favourite category" priority literally. Defensible, but worth discussing whether profit should win ties.
+
+**Next:** decide on the timeout, then Session 4 (Telegram bot + simulator).
