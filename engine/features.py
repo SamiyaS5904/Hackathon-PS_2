@@ -36,6 +36,7 @@ HIGH_VALUE_SPEND_RUPEES = 20_000   # lifetime spend above this = high-value cust
 OPEN_CART_HOURS = 72               # an abandoned cart counts as "open" for 3 days
 FAVOURITE_MIN_ORDERS = 3           # ordered 3+ times = favourite item
 SENT_STATUSES = ("sent", "queued", "scheduled", "would_send")  # decisions that count as "an offer went out"
+LOYAL_MIN_ORDERS = 5               # same as config/rules.yaml fairness.loyal_min_orders (default); used for the label
 
 
 @dataclass
@@ -101,6 +102,11 @@ class CustomerProfile:
     # estimate
     p_buy_48h_no_offer: float = 0.0
 
+    # interest: products they searched for, viewed repeatedly, wishlisted or left in the cart (strongest first)
+    intent_products: list[dict] = field(default_factory=list)
+    is_loyal: bool = False        # enough orders to be called a loyal customer (rules: fairness.loyal_min_orders)
+    as_of: str = ""               # the moment (UTC) this profile describes
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -149,7 +155,15 @@ def build_profile(conn: sqlite3.Connection, customer_id: int, now: datetime, cat
         offers_last_30d=offers_30d,
         last_offer_at=last_offer_at,
     )
+    profile.as_of = now_ts
+    profile.intent_products = _intent_products(conn, customer_id, now, catalog, profile.open_cart)
+    profile.is_loyal = profile.total_orders >= LOYAL_MIN_ORDERS
     profile.p_buy_48h_no_offer = estimate_p_buy_no_offer(profile)
+    # If the uplift model has been trained, its "no offer" prediction replaces the hand-made formula
+    from engine.uplift import get_model  # imported here to avoid a circular import
+    model = get_model()
+    if model:
+        profile.p_buy_48h_no_offer = round(model.p_no_offer(profile), 3)
     return profile
 
 
@@ -282,6 +296,62 @@ def _browsing(conn: sqlite3.Connection, customer_id: int, now: datetime) -> dict
         "recent_searches": searches,
         "abandon_rate": round(abandons / (abandons + checkouts), 2) if (abandons + checkouts) else 0.0,
     }
+
+
+def _intent_products(conn: sqlite3.Connection, customer_id: int, now: datetime, catalog: Catalog,
+                     open_cart: dict | None) -> list[dict]:
+    """
+    Products this customer has shown interest in recently, strongest first (max 3):
+      - left in an open cart           (strongest signal)
+      - added to wishlist (14 days)
+      - matches what they searched for (7 days), and they looked at it
+      - viewed 2+ times (7 days)
+    Products they bought in the last 7 days are left out (they already have them).
+    This lets offers target exactly what the customer wants right now: "Still thinking about the Mira lipstick?"
+    """
+    now_ts = to_ts(now)
+    since_14 = to_ts(now - timedelta(days=14))
+    since_7 = to_ts(now - timedelta(days=7))
+    score: defaultdict[int, float] = defaultdict(float)
+    signals: defaultdict[int, list[str]] = defaultdict(list)
+
+    for item in (open_cart or {}).get("items", []):
+        score[item["product_id"]] += 3
+        signals[item["product_id"]].append(f"left in cart {open_cart['left_hours_ago']:.0f}h ago")
+    views: Counter = Counter()
+    searches: list[str] = []
+    for r in conn.execute("SELECT event_type, product_id, query, ts FROM browse_events WHERE customer_id = ? "
+                          "AND ts BETWEEN ? AND ?", (customer_id, since_14, now_ts)):
+        if r["event_type"] == "wishlist_add" and r["product_id"]:
+            score[r["product_id"]] += 2
+            signals[r["product_id"]].append("added to wishlist")
+        elif r["event_type"] == "view" and r["product_id"] and r["ts"] >= since_7:
+            views[r["product_id"]] += 1
+        elif r["event_type"] == "search" and r["query"] and r["ts"] >= since_7:
+            searches.append(r["query"].lower())
+    for product_id, count in views.items():
+        product = catalog.get(product_id)
+        if not product:
+            continue
+        matched = [q for q in searches if product.subcategory.lower() in q]
+        if matched:
+            score[product_id] += 2
+            signals[product_id].append(f"searched '{matched[0]}'")
+        if count >= 2:
+            score[product_id] += count
+            signals[product_id].append(f"viewed {count} times this week")
+
+    bought = {r[0] for r in conn.execute("""SELECT oi.product_id FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                                            WHERE o.customer_id = ? AND o.ts BETWEEN ? AND ?""",
+                                         (customer_id, since_7, now_ts))}
+    ranked = sorted((pid for pid in score if pid not in bought and catalog.get(pid) and signals[pid]),
+                    key=lambda pid: -score[pid])
+    out = []
+    for product_id in ranked[:3]:
+        p = catalog.get(product_id)
+        out.append({"product_id": p.id, "name": p.name, "category": p.category, "price_rupees": p.price_paise // 100,
+                    "signals": list(dict.fromkeys(signals[product_id]))})
+    return out
 
 
 def _open_cart(conn: sqlite3.Connection, customer_id: int, now: datetime, catalog: Catalog) -> dict | None:

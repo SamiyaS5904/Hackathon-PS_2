@@ -27,3 +27,6 @@ dashboard/dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Trained ML models (rebuild with: python -m engine.uplift --train)
+models/
