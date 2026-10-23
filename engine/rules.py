@@ -58,18 +58,24 @@ class RuleState:
     new_customer_best: dict[tuple[str, str], float] = field(default_factory=dict)
 
 
-def load_rule_state(conn: sqlite3.Connection, customer_id: int, rules: ActiveRules, now: datetime) -> RuleState:
-    """Read sent offers, budgets used and recent purchases from the database as of `now`."""
+def load_rule_state(conn: sqlite3.Connection, customer_id: int, rules: ActiveRules, now: datetime,
+                    exclude_decision_id: int | None = None) -> RuleState:
+    """
+    Read sent offers, budgets used and recent purchases from the database as of `now`.
+    `exclude_decision_id` leaves one decision out: used when re-checking a scheduled offer, so it doesn't count
+    against itself (it would otherwise look like 'an offer already sent').
+    """
     now_ts = to_ts(now)
     placeholders = ",".join("?" * len(SENT_STATUSES))
+    skip = exclude_decision_id or -1
     state = RuleState()
 
     # Offers to THIS customer: count, last time, and which are still active (not expired yet)
     sent_times: list[datetime] = []
     for r in conn.execute(f"""
             SELECT final_offer, COALESCE(send_at, created_at) t, offer_cost_paise, created_at FROM decisions
-            WHERE customer_id = ? AND status IN ({placeholders}) AND created_at <= ?""",
-                          (customer_id, *SENT_STATUSES, now_ts)):
+            WHERE customer_id = ? AND status IN ({placeholders}) AND created_at <= ? AND id != ?""",
+                          (customer_id, *SENT_STATUSES, now_ts, skip)):
         t = parse_ts(r["t"])
         sent_times.append(t)
         offer = json.loads(r["final_offer"]) if r["final_offer"] else {}
@@ -90,10 +96,11 @@ def load_rule_state(conn: sqlite3.Connection, customer_id: int, rules: ActiveRul
     today = to_ts(start_of_ist_day(now))
     state.spent_today_paise = conn.execute(
         f"SELECT COALESCE(SUM(offer_cost_paise), 0) FROM decisions WHERE status IN ({placeholders}) "
-        f"AND created_at >= ? AND created_at <= ?", (*SENT_STATUSES, today, now_ts)).fetchone()[0]
+        f"AND created_at >= ? AND created_at <= ? AND id != ?", (*SENT_STATUSES, today, now_ts, skip)).fetchone()[0]
     state.spent_month_paise = conn.execute(
         f"SELECT COALESCE(SUM(offer_cost_paise), 0) FROM decisions WHERE status IN ({placeholders}) "
-        f"AND created_at >= ? AND created_at <= ?", (*SENT_STATUSES, _month_start(now), now_ts)).fetchone()[0]
+        f"AND created_at >= ? AND created_at <= ? AND id != ?", (*SENT_STATUSES, _month_start(now), now_ts, skip)
+    ).fetchone()[0]
 
     # Fairness inputs
     week_ago = to_ts(now - timedelta(days=rules.fairness["no_offer_after_full_price_days"]))
