@@ -94,6 +94,14 @@ agent can weigh all of this together for each person, at each moment.
 It **builds** an offer from building blocks (type, amount, product, expiry, min order, send time, message)
 instead of picking from a fixed list. "Send nothing" is allowed and is often the smartest choice.
 
+**How the loop is controlled (`engine/agent.py`):**
+- Every `propose_offer` goes straight through the rules checker. If it's rejected, the exact reasons ("message
+  says 25% but the offer is 8%", "fake urgency: hurry") go back to the AI, so it can fix the offer.
+- After 2 rejected proposals, or any error, timeout, refusal, or a run that ends without a decision, the AI is
+  stopped and the free fallback decides. The AI never gets stuck and never blocks a decision.
+- Max 6 AI calls per decision. Every call's tokens and cost are added up and saved with the decision.
+- The AI never does the profit math: `estimate_profit` returns numbers from `engine/profit.py`.
+
 ---
 
 ## 7. Why the agent must explain itself

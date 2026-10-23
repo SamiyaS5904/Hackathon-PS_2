@@ -167,3 +167,50 @@ pytest harness/                                   # 67 tests, ~8 seconds
 - Uplift is still a heuristic (documented in `engine/profit.py`); a trained model replaces it in Session 7.
 
 **Next:** Session 3: AI agent (`engine/agent.py`) with tools, structured reasoning and the retry loop.
+
+---
+
+## 2026-10-23: Session 3: The AI agent
+**Built:** Claude (Opus 5.5) decides offers with 7 tools; every proposal is checked by the rules inside the loop;
+any failure hands over to the fallback; real tokens and cost are logged.
+
+**Files:**
+- `engine/agent.py`: system prompt (goal, priorities, message rules, reasoning format, data safety), 7 strict tools
+  (`get_customer_profile`, `get_recent_activity`, `get_offer_history`, `get_offer_limits`, `estimate_profit`,
+  `propose_offer`, `propose_no_offer`), the controlled loop, cost tracking
+- `engine/decide.py`: agent route; approved -> agent decision (rule repairs listed); no_offer -> "nothing" by agent;
+  failure -> fallback, with the AI attempt, its tokens and cost still recorded; report shows tools and cost
+- `engine/gatekeeper.py`: `agent_available` switch (lets tests plug in a fake AI)
+- `harness/fake_agent.py` (scripted fake Claude client), `harness/test_agent.py` (15 tests)
+- `.env.example`: `AGENT_TIMEOUT_SECONDS`, `AGENT_EFFORT`, `OFFERPILOT_NOW`
+
+**How to run / check:**
+```bash
+pytest harness/                                   # 82 tests, ~6 seconds
+python -m engine.decide --customer 648            # uses the AI once ANTHROPIC_API_KEY is in .env
+```
+
+**Tested paths (all with the fake client, free):** approved first time; rejected -> reasons sent back -> fixed ->
+approved; 2 rejections -> fallback; "send nothing"; API error; timeout (first call's cost still counted); refusal;
+text without a decision; invalid proposal; 6-call limit; tools return the right data; "buys anyway" customers
+only see perks; through `decide()`: failure -> fallback with cost recorded, no-offer logged as an AI decision,
+used-up Day Plan never calls the AI.
+
+**Decisions & why:**
+- **Manual loop instead of the SDK tool runner:** the rules check must run inside the loop and send rejection
+  reasons back; we also need hard limits (6 calls, 2 rejections) and per-call token accounting.
+- **"2 rejections -> fallback"** (CLAUDE.md 4.8 and harness test 4): the AI gets its first proposal plus one fix.
+- **Strict tool schemas, no forced tool choice** (forcing a tool is not allowed on Opus 5.5); the prompt says to
+  finish with `propose_offer` / `propose_no_offer`, and a run without one counts as a failure.
+- **Effort set explicitly** (`medium` by default; Opus 5.5 always thinks, effort controls how much).
+- **Refusals are handled by our own fallback**, not the API's beta model-fallback feature: a refusal simply means
+  the fallback rules decide. Simpler, and nothing to verify without a key.
+- **Prompt caching** on the stable system prompt + tools, to cut the cost of the repeated prefix in each loop.
+- **Timeout:** 10s per call as in CLAUDE.md, but configurable. Opus with thinking may need 20-30s per call; if
+  real decisions keep timing out we should raise it (needs your OK, since it differs from CLAUDE.md).
+
+**Not done yet:** no real Claude call has been made: there is no `.env` / API key yet. Session 3's user check
+("read the agent's reasoning for 3-4 customers") needs the key.
+
+**Next:** with the key: 4 real decisions to check reasoning quality. Then Session 4: Telegram bot + simulator
+(needs a bot token from @BotFather).
