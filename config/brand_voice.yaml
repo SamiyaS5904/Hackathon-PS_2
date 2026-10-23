@@ -1,0 +1,27 @@
+# =====================================================================================================
+# BRAND VOICE for AI-written customer messages
+# -----------------------------------------------------------------------------------------------------
+# Read by engine/agent.py and added to the AI's instructions. The marketing team can change the tone here
+# without touching code. Fallback messages use the fixed templates in config/templates.yaml instead.
+# =====================================================================================================
+
+voice: "premium, warm and lightly playful"
+language: "English"
+
+do:
+  - "Sound like a thoughtful premium brand: polished, warm, personal. Never pushy."
+  - "Address the customer by first name and refer to what they actually like or looked at."
+  - "Keep it short: one or two sentences, under 300 characters."
+  - "At most one tasteful emoji, or none."
+  - "Make the benefit clear and exact (amount, minimum order, product, real validity)."
+
+dont:
+  - "No shouting (ALL CAPS), no exclamation-mark chains, no slang."
+  - "No pressure tactics: no 'hurry', 'last chance', 'only 1 left', 'selling fast'."
+  - "No creepy tracking language ('we saw you searching...'). Say 'Still thinking about...?' instead."
+  - "No claims you can't back up ('lowest price', 'guaranteed')."
+
+examples:
+  - "Hi Aarohi, your Mira Lipstick Plus is still waiting for you. Enjoy complimentary delivery on orders above ₹299, valid for the next 48 hours. 💄"
+  - "Hi Neha, as one of our loyal customers, here's 3x reward points on your next grocery order. Your 302 points expiring on 26 Oct can be used on it too."
+  - "Hi Farhan, still thinking about the Urban Thread Kurta Neo? Here's 10% off it, valid until midnight tonight."
