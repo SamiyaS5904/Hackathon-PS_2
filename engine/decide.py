@@ -18,6 +18,10 @@ Status meanings (shown on the dashboard):
   nothing    - deliberately sent nothing (gatekeeper skip, or no offer worth it)
   blocked    - the AI's proposals kept breaking the rules and nothing could be sent
   cancelled  - a scheduled offer that failed a re-check after the rules changed
+  waiting    - the AI chose to wait: maybe they buy on their own; a follow-up looks again at send_at
+               (engine/followups.py). Then it becomes:
+  bought_naturally - they bought while we waited: no offer was needed, its cost was saved
+  followed_up      - they didn't buy: a new 'followup' decision was made (linked in the reasoning)
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ from engine.gatekeeper import screen
 from engine.models import CheckResult, OfferProposal
 from engine.rules import check_offer, load_rule_state
 from engine.rules_store import get_active_rules
+from engine.triggers import detect_triggers
 
 
 @dataclass
@@ -62,6 +67,7 @@ class DecisionOutcome:
     input_tokens: int | None = None
     output_tokens: int | None = None
     cost_usd: float | None = None
+    followup_at: datetime | None = None      # for 'waiting': when to look at the customer again
     decision_id: int | None = None
     created_at: str = ""
 
@@ -89,10 +95,17 @@ def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manu
                        "expected_impact": "No cost; no AI call spent.", "why_now": gate.reason},
             rule_checks=[], expected_profit_paise=None, offer_cost_paise=None, rules_version=rules.version)
     elif gate.route == "agent":
-        ctx = AgentContext(conn, profile, catalog, rules, state, now, trigger_type, trigger_detail)
+        ctx = AgentContext(conn, profile, catalog, rules, state, now, trigger_type, trigger_detail,
+                           allow_wait=trigger_type != "followup")
         agent = run_agent(ctx, client=agent_client)
         if agent.status == "approved":
             outcome = _agent_outcome(agent, profile, rules, now, trigger_type)
+        elif agent.status == "waiting":
+            # Smart timing: nothing is sent now; engine/followups.py looks at this customer again later
+            outcome = DecisionOutcome(
+                customer_id, profile.first_name, trigger_type, "agent", "waiting", None,
+                reasoning=agent.reasoning, rule_checks=[], expected_profit_paise=None, offer_cost_paise=None,
+                rules_version=rules.version, followup_at=now + timedelta(hours=agent.wait_hours))
         elif agent.status == "no_offer":
             outcome = DecisionOutcome(
                 customer_id, profile.first_name, trigger_type, "agent", "nothing", None,
@@ -173,7 +186,7 @@ def _save(conn: sqlite3.Connection, o: DecisionOutcome, trigger_detail: dict | N
         o.customer_id, o.created_at, o.trigger_type, json.dumps(trigger_detail) if trigger_detail else None,
         o.decided_by, o.status, json.dumps(o.proposal) if o.proposal else None,
         offer.model_dump_json() if offer else None, offer.message if offer else None,
-        to_ts(offer.send_at) if offer and offer.send_at else None,
+        to_ts(offer.send_at) if offer and offer.send_at else (to_ts(o.followup_at) if o.followup_at else None),
         json.dumps(o.reasoning), json.dumps(o.rule_checks), o.expected_profit_paise, o.offer_cost_paise,
         o.rules_version, json.dumps(o.tool_trace) if o.tool_trace else None,
         o.input_tokens, o.output_tokens, o.cost_usd))
@@ -292,6 +305,8 @@ def main() -> None:
     parser.add_argument("--customer", type=int, action="append", help="customer id (can repeat)")
     parser.add_argument("--showcase", action="store_true", help="one example customer per situation")
     parser.add_argument("--trigger", default="manual")
+    parser.add_argument("--auto-trigger", action="store_true",
+                        help="use the strongest trigger detected for each customer (cart, interest, habit break...)")
     parser.add_argument("--no-agent", action="store_true", help="force the free fallback rules")
     parser.add_argument("--dry-run", action="store_true", help="show the decision but don't save it")
     parser.add_argument("--now", type=parse_ts, help="pretend it's this time (UTC, e.g. 2026-10-23T06:30:00Z)")
@@ -306,8 +321,13 @@ def main() -> None:
     if not targets:
         parser.error("give --customer ID or --showcase")
     for label, cid in targets:
-        outcome = decide(conn, cid, args.trigger, now=now, use_agent=not args.no_agent, dry_run=args.dry_run,
-                         catalog=catalog)
+        trigger, detail = args.trigger, None
+        if args.auto_trigger:
+            found = detect_triggers(build_profile(conn, cid, now, catalog))
+            if found:
+                trigger, detail = found[0].type, found[0].detail
+        outcome = decide(conn, cid, trigger, trigger_detail=detail, now=now, use_agent=not args.no_agent,
+                         dry_run=args.dry_run, catalog=catalog)
         print(f"\n=== {label} ===")
         print(format_decision(outcome))
 

@@ -141,6 +141,11 @@ def screen(conn: sqlite3.Connection, profile: CustomerProfile, rules: ActiveRule
     if state.hours_since_last_offer is not None and state.hours_since_last_offer < spam["min_hours_between_offers"]:
         return GateResult("skip", f"Got an offer only {state.hours_since_last_offer:g}h ago "
                                   f"(need {spam['min_hours_between_offers']}h).", priority)
+    waiting = conn.execute("SELECT send_at FROM decisions WHERE customer_id = ? AND status = 'waiting' AND send_at > ? "
+                           "ORDER BY send_at LIMIT 1", (profile.customer_id, to_ts(now))).fetchone()
+    if waiting and trigger_type != "followup":
+        return GateResult("skip", f"The AI is already waiting to see if this customer buys on their own "
+                                  f"(follow-up at {waiting[0]}).", priority)
     if state.active_offers >= rules.integrity["max_active_offers_per_customer"]:
         return GateResult("skip", "Customer already has an active offer.", priority)
     paused = circuit_breaker(conn, rules, state, now)
