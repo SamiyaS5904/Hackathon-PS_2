@@ -9,7 +9,7 @@
 # =====================================================================================================
 
 habit_favourite:
-  message: "Hi {first_name}! Time to restock your favourite {product_name}? Get {discount} off today, valid till {expiry}."
+  message: "Hi {first_name}! Time to restock your favourite {product_name}? Get {discount} off it on orders above {min_order}, valid till {expiry}."
   summary: "Habit is breaking: {first_name} usually orders every {usual_gap} days but it has been {days_since} days. Offered {discount} off their favourite {product_name}."
 
 cart_free_delivery:

@@ -38,6 +38,7 @@ COMEBACK_INACTIVE_DAYS = 30
 WALLET_REMINDER_MIN_RUPEES = 200
 WALLET_REMINDER_IDLE_DAYS = 30
 FALLBACK_DISCOUNT_PCT = 10
+HABIT_MIN_ORDER_RUPEES = 499
 EXPIRY_HOURS = 24
 
 
@@ -76,9 +77,12 @@ def build_candidates(profile: CustomerProfile, catalog: Catalog, rules: ActiveRu
     if (profile.overdue_ratio or 0) >= HABIT_OVERDUE_RATIO and profile.favourite_items:
         fav = profile.favourite_items[0]
         amount = float(min(FALLBACK_DISCOUNT_PCT, caps[fav["category"]]))
+        # Minimum order of at least Rs 499: favourites are often cheap restock items (snacks, tea), and a discount
+        # on a Rs 99 item alone can't earn the minimum profit. The discount still applies only to the favourite.
         fits.append(Candidate(1, "habit break -> favourite item", "habit_favourite",
                               OfferProposal(offer_type="pct_off", amount=amount, product_id=fav["product_id"],
-                                            min_order_rupees=fav["price_rupees"], expiry_hours=EXPIRY_HOURS),
+                                            min_order_rupees=max(fav["price_rupees"], HABIT_MIN_ORDER_RUPEES),
+                                            expiry_hours=EXPIRY_HOURS),
                               {"product_name": fav["name"]}))
     else:
         skipped.append({"rule": "1. habit break -> favourite item",
