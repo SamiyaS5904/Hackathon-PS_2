@@ -104,6 +104,9 @@ def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manu
             outcome.reasoning["agent_attempt"] = {"error": agent.error, "rejected_proposals": agent.rejected_proposals}
             if outcome.offer is None and agent.rejected_proposals:
                 outcome.status = "blocked"  # counts towards the circuit breaker
+        # The menu of offers code prepared for the AI: the manager sees every option and its numbers
+        if agent.candidates:
+            outcome.reasoning["candidates_prepared_by_code"] = agent.candidates
         # The AI was called, so its cost and trace are recorded whatever happened (counts in the Day Plan)
         outcome.tool_trace, outcome.proposal = agent.tool_trace, agent.first_proposal or outcome.proposal
         outcome.input_tokens, outcome.output_tokens = agent.input_tokens, agent.output_tokens
@@ -238,6 +241,11 @@ def format_decision(o: DecisionOutcome) -> str:
         lines.append(f"  REPAIRED {repair[:160]}")
     if r.get("agent_attempt"):
         lines.append(f"  AI       tried but failed: {r['agent_attempt']['error']}")
+    menu = r.get("candidates_prepared_by_code") or []
+    if menu:
+        allowed = [c for c in menu if c["allowed_by_rules"]]
+        lines.append(f"  MENU     {len(menu)} candidate offers prepared by code ({len(allowed)} allowed): "
+                     + "; ".join(f"{c['idea']} Rs {c.get('expected_profit_rupees')}" for c in allowed[:4]))
     for step in o.tool_trace:
         lines.append(f"  TOOL     {step['tool']}: {str(step.get('result', ''))[:140]}")
     if o.input_tokens is not None:
