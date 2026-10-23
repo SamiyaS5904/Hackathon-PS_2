@@ -271,7 +271,43 @@ These are estimates. Real numbers are logged per decision once the agent runs.
 
 ---
 
-## 18. Why Day 1 = MVP, Day 2 = improve
+## 18. Why the one-call design (code prepares the menu, the AI judges)
+**Why:** in the first real runs the AI spent 2-5 API calls asking the profit calculator about predictable ideas
+(points, free delivery, 10% off). That's slow and costly, and sometimes it forgot to check the best idea.
+
+**How:** `engine/candidates.py` builds a personalised menu for each customer (their favourite item, cart item,
+interest products, top category, usual order size) and runs every idea through the profit maths and the rules.
+The AI gets the menu in its first message and usually decides in one call: pick, adjust, write, explain. It can
+still price its own ideas (`estimate_profit`, up to 6 at once) or decide to wait.
+- Planner (code) -> decision-maker (AI) -> guard (rules). Each part does what it's best at.
+- With Claude Sonnet 5.5: **~Rs 1.7-1.9 per decision** (Opus first version: ~Rs 7.6).
+- Every customer is judged against the same full menu, so good ideas are never forgotten, and the manager sees
+  every option with numbers calculated by code.
+
+## 19. Why a trained uplift model (and why it's blended with the formula)
+**Why:** "how would you know whether your offers work?" Our past campaigns had random holdout groups, so we can
+learn who buys BECAUSE of an offer. That's the honest way to measure incrementality.
+
+**How:** two small scikit-learn models (no API): one learns the chance to buy without an offer (holdout rows), one
+with an offer (treatment rows). Checked against the hidden truth, the model alone and the formula alone were close
+(0.41 vs 0.44 ranking quality); **their average scored 0.50**, best on 5 of 6 offer types, because they make
+different mistakes. So production uses the average. For "buys anyway" the model is clearly better (AUC 0.847 vs
+0.731) and better calibrated, so it replaces the formula there.
+
+## 20. Why "knows when not to send" (waiting) and verified claims
+**Waiting:** if a customer may buy on their own soon, an offer only gives margin away. The AI can wait 1-48h; a
+follow-up then checks: bought -> nothing was spent; didn't buy -> a new decision (which can't wait again). This is
+the most agentic part: the AI plans over time instead of reacting once.
+
+**Verified claims:** a premium brand can't afford to mislead. "Valid until midnight" is checked against the real
+expiry; "as a loyal customer" against the real order count. Real urgency and real loyalty are allowed; fake ones
+are blocked by code, whatever the AI writes.
+
+**Interest-based offers:** offers on what the customer searched for, viewed repeatedly, wishlisted or left in the
+cart are the most likely to be accepted. When a discount on a cheap item can't earn the minimum profit, the AI
+wraps a profitable offer (delivery, points, wallet reminder) around that product instead.
+
+## 21. Why Day 1 = MVP, Day 2 = improve
 **Why:** A small thing that works end to end beats a big thing that half works. Once the full pipeline runs, every
 improvement can be tested immediately.
 
