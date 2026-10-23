@@ -1,0 +1,122 @@
+SONNET 5.5 + ONE-CALL DESIGN + AGENTIC FEATURES + UPLIFT MODEL (dry run, same moment as the first Opus run)
+
+--- Run 1: 5 customers ---
+Model: claude-sonnet-5-5 | uplift model loaded: True
+
+=== #648 Mansi | trigger: habit_break {'usual_gap_days': 10.5, 'days_since_last_order': 48.3}
+  MENU: 3x reward points Rs 60; 2x reward points Rs 45; free delivery Rs 41; early access to home Rs 41; Rs 150 off home Rs 38; Rs 150 wallet cashback on home Rs 37; 10% off home Rs 34; 15% off home Rs 28; free reminder (points expiring / wallet balance) Rs 28
+  DECISION: 3x reward points | calls 1 [19.5] | 20s | $0.0273 (in 7,738, cache read 0, out 942)
+  MESSAGE: Hi Mansi, as one of our loyal customers, here's 3x reward points on your next order, whether it's a Homely Bedsheet Prime refresh or your PureLeaf lipstick. Valid for the next 48 hours.
+  WHY: Send 3x reward points, the most profitable allowed candidate, scheduled for Mansi's usual shopping hour tomorrow.
+    - Usually orders every 10.5 days; last order 48.3 days ago (overdue 4.6x)
+    - Chance to buy in 48h without offer only 0.9%
+    - Deal-seeker score 0.0, discount dependence 0.0, so a discount is not needed
+    - Loyal, high-value customer with 33 orders
+    - Usual shopping hour 16:00 IST; now is close to quiet hours at 22:00
+    ALSO: 2x points: profit Rs 45, lower lift
+    ALSO: Free delivery: Rs 41, cost Rs 40
+    ALSO: Early access home: Rs 41, weaker lift
+    ALSO: Rs 150 off home: Rs 38, higher cost
+    ALSO: 10% off home: Rs 34, cost Rs 169
+    ALSO: 10% off Organica Snacks: blocked, profit Rs 7
+  IMPACT: Chance to buy 0.9% -> 11.2%, expected profit Rs 60, cost Rs 33.
+  WHY NOW: The habit is clearly broken; sending at her usual hour tomorrow avoids the quiet hours that start in an hour.
+  TOOLS: ['propose_offer'] 
+
+=== #1790 Aarohi | trigger: cart_abandoned {'product': 'Mira Lipstick Plus', 'cart_value_rupees': 729, 'left_hours_ago': 54.2}
+  MENU: free delivery Rs 92; 10% off fashion Rs 51; Rs 250 off fashion Rs 48; 15% off fashion Rs 48; Rs 200 wallet cashback on fashion Rs 42; 10% off favourite item (Urban Thread Handbag Classic) Rs 41; 3x reward points Rs 40; 10% off cart item (Mira Lipstick Plus) Rs 37; early access to fashion Rs 36
+  DECISION: free delivery (min order Rs 299) | calls 1 [8.1] | 8s | $0.0182 (in 7,923, cache read 4,729, out 1,092)
+  MESSAGE: Hi Aarohi, your Mira Lipstick Plus is still waiting for you. As one of our loyal customers, enjoy complimentary delivery on orders above ₹299, valid for the next 48 hours. 💄
+  WHY: Send free delivery (min ₹299), the most profitable allowed candidate, to nudge Aarohi back to her abandoned Mira Lipstick Plus cart without discounting a product she already buys regularly.
+    - Mira Lipstick Plus left in cart 54h ago (₹729)
+    - Chance to buy in 48h without offer only 2%
+    - Deal-seeker score 0.12, discount dependence 0.05: a discount is not needed
+    - Habit on track: last order 8.3 days ago vs usual gap 19.9 days
+    - Loyal, high-value customer; no offers in last 7 days; usual shopping hour 14:00
+    ALSO: C8 10% off lipstick: highest conversion (14.3%) but expected profit only ₹37 and costs ₹72
+    ALSO: C2 10% off fashion: ₹51 profit, costs ₹226, not tied to the cart item
+    ALSO: C7 3x points: ₹40 profit, lower conversion (6.2%)
+    ALSO: C9 early access fashion: ₹36 profit, weak link to cart
+    ALSO: C3/C4/C5/C6 fashion discounts: ₹41-48 profit with high cost
+  IMPACT: Chance to buy 2% -> 11.3%, offer cost ₹40, expected profit ₹92, margin after offer 44%.
+  WHY NOW: The cart is 54 hours old and the customer is unlikely to return unaided; the message is scheduled for her usual 14:00 browsing hour, outside quiet hours.
+  TOOLS: ['propose_offer'] 
+
+=== #2259 Neha | trigger: habit_break {'usual_gap_days': 18.0, 'days_since_last_order': 54.1}
+  MENU: 3x reward points Rs 101; 2x reward points Rs 60; free reminder (points expiring / wallet balance) Rs 46; free delivery Rs 27
+  DECISION: 3x reward points | calls 1 [7.7] | 8s | $0.0158 (in 7,408, cache read 4,729, out 955)
+  MESSAGE: Hi Neha, as one of our loyal customers, here's 3x reward points on your next order, valid for the next 48 hours. Some of your points expire on 26 Oct, and they can be used on it too. Your favourite snacks are waiting.
+  WHY: Send 3x reward points, the most profitable allowed candidate, to a lapsed, high-value, non-deal-seeking customer.
+    - Usually orders every 18 days; last order 54.1 days ago (overdue ratio 3.0)
+    - Deal-seeker score 0.0 and sale-order share 17%, so a discount is not needed
+    - 302 points expire 26 Oct; 599 points never redeemed
+    - Chance to buy in 48h without an offer is only 4.5%
+    - Customer is loyal; 0 offers in the last 7 days
+    ALSO: 2x points: expected profit Rs 60, lower lift (16%)
+    ALSO: Free reminder: Rs 46, lift only to 13%
+    ALSO: Free delivery: Rs 27, costs Rs 40
+    ALSO: 10% off Organica Snacks Plus: Rs 5, blocked by rules
+    ALSO: 10% off grocery: Rs 6, blocked by rules
+    ALSO: Early access to grocery: Rs 19, blocked by rules
+  IMPACT: Chance to buy in 48h 4.5% -> 24.8%; expected profit Rs 101 at Rs 31 cost, 32% margin.
+  WHY NOW: Habit is clearly broken and points expire in 3 days; sending at 21:06 is before quiet hours, close to her usual shopping hour.
+  TOOLS: ['propose_offer'] 
+
+=== #128 Khushi | trigger: product_interest {'product': 'Organica Atta Plus', 'signals': ['viewed 2 times this week']}
+  MENU: 3x reward points Rs 108; early access to fashion Rs 100; 2x reward points Rs 98; 10% off fashion Rs 95; free delivery Rs 91; Rs 200 off fashion Rs 90; Rs 200 wallet cashback on fashion Rs 88; 15% off fashion Rs 80; 10% off favourite item (StreetFox Jeans Lite) Rs 75
+  DECISION: 3x reward points | calls 1 [9.5] | 10s | $0.0176 (in 7,990, cache read 4,729, out 1,010)
+  MESSAGE: Hi Khushi, as one of our loyal customers, enjoy 3x reward points on your next order, whether it's pantry favourites like Atta or a fresh pair of jeans. Valid for the next 48 hours. 🌿
+  WHY: Send 3x reward points: the most profitable allowed candidate. A discount on the viewed Organica Atta Plus is blocked because it is unprofitable.
+    - Orders every 11.9 days; last order 9.3 days ago (on track, overdue ratio 0.78)
+    - Chance to buy in 48h without an offer is 5.6%
+    - Viewed Organica Atta Plus 2 times this week (Rs 409, thin margin)
+    - Points balance is 0 and redeem rate is 0.96, so she values points
+    - Deal-seeker score 0.0, so she does not need a discount
+    - Loyal customer; 0 offers in the last 7 days
+    ALSO: C2 early access to fashion: Rs 100 profit, lower lift (15.6%)
+    ALSO: C3 2x points: Rs 98 profit
+    ALSO: C4 10% off fashion: Rs 95 profit, Rs 200 cost
+    ALSO: C10 10% off Atta: blocked, Rs 5 profit is below the Rs 20 minimum
+    ALSO: C9 10% off jeans: Rs 75 profit, higher cost
+  IMPACT: Chance to buy 5.6% -> 19.3%; expected profit Rs 108; cost Rs 40.
+  WHY NOW: It is 21:06, just before quiet hours, and she showed fresh interest in grocery, so a low-cost nudge fits now.
+  TOOLS: ['propose_offer'] 
+
+=== #1 Farhan | trigger: product_interest {'product': 'Aurae Sunscreen Lite', 'signals': ['added to wishlist', 'viewed 2 times this week']}
+  MENU: Rs 150 off home Rs 45; Rs 150 wallet cashback on home Rs 40; 3x reward points Rs 36; 10% off home Rs 35; 15% off home Rs 33; early access to home Rs 31; free delivery Rs 30; free reminder (points expiring / wallet balance) Rs 29; 2x reward points Rs 24
+  DECISION: Rs 150 off on home (min order Rs 800) | calls 1 [8.8] | 9s | $0.0180 (in 7,719, cache read 4,729, out 1,102)
+  MESSAGE: Hi Farhan, a little something for your home favourites: enjoy ₹150 off home orders above ₹800, valid for the next 48 hours. Happy to help you refresh your space.
+  WHY: Send ₹150 off home above ₹800 (C1). The sunscreen-specific offer is blocked because profit is below the minimum, so we use the favourite category, which is the most profitable allowed candidate.
+    - Wishlisted Aurae Sunscreen Lite (₹299) and viewed it 2 times, but a 10% offer there gives only Rs 7 expected profit (below Rs 20 minimum)
+    - Home is 75% of spend and a favourite category
+    - Deal-seeker score 0.94; 67% of orders were in sales
+    - Chance to buy in 48h without an offer is 0.3%
+    - No offers in the last 7 days; 1 in the last 30 days
+    ALSO: C10 10% off sunscreen: blocked, Rs 7 profit
+    ALSO: C2 ₹150 cashback: Rs 40 profit, lower conversion
+    ALSO: C3 3x points: Rs 36 profit, lower conversion
+    ALSO: C4 10% off home: Rs 35 profit
+    ALSO: C8 reminder of ₹2200 idle wallet: Rs 29 profit, free but lower conversion
+  IMPACT: Chance to buy in 48h goes from 0.3% to 10.1%. Expected profit is Rs 45, with a margin of 27.4% after the offer.
+  WHY NOW: The customer showed fresh interest today, and it is 21:06, before quiet hours begin at 22:00.
+  TOOLS: ['propose_offer'] 
+
+SUMMARY (Opus first run -> Sonnet now)
+  #648 Mansi   3x points        -> 3x reward points                              $0.0890 -> $0.0273  (1 call, 20s)
+  #1790 Aarohi  free delivery    -> free delivery (min order Rs 299)              $0.0857 -> $0.0182  (1 call, 8s)
+  #2259 Neha    3x points        -> 3x reward points                              $0.1062 -> $0.0158  (1 call, 8s)
+  #128 Khushi  wallet reminder  -> 3x reward points                              $0.0647 -> $0.0176  (1 call, 10s)
+  #1 Farhan  -                -> Rs 150 off on home (min order Rs 800)            -    -> $0.0180  (1 call, 9s)
+TOTAL Sonnet: $0.0969 (~Rs 8.5), average ~Rs 1.71 per decision
+
+
+--- Run 2 after fixes (Rs 499 minimum for item offers, personalise any offer, loyalty not every time) ---
+#1790 Aarohi (cart: Mira Lipstick, 54h): free delivery (min Rs 299) | 1 call | $0.0276
+  "Hi Aarohi, still thinking about your Mira Lipstick Plus? Enjoy complimentary delivery on orders above ₹299, valid for the next 48 hours. 💄"
+#128 Khushi (viewed Organica Atta twice): 3x reward points | 1 call | $0.0175
+  "Hi Khushi, still thinking about the Organica Atta Plus? Enjoy 3x reward points on your next order, valid for the next 48 hours. Happy to make your pantry top-up a little more rewarding."
+#1 Farhan (wishlisted + viewed Aurae Sunscreen): free wallet reminder | 1 call | $0.0186
+  "Hi Farhan, still thinking about the Aurae Sunscreen Lite? You have ₹2200 waiting in your wallet, ready to use on your next order. This reminder is valid for the next 48 hours."
+TOTAL $0.0638 (~Rs 5.6), ~Rs 1.87 per decision
+
+"Buys anyway" check on 1,200 holdout rows (real outcome 7.2%): formula AUC 0.731 / avg 8.8%; model held-out test AUC 0.847 / avg 6.7%.

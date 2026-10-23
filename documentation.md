@@ -302,3 +302,59 @@ Evidence: [docs/evidence/cost_optimization_2026-10-23.txt](docs/evidence/cost_op
 values and every alternative with its profit. Prompt caching works: ~4,800 tokens read from cache per decision.
 
 **Cost per decision now: ~$0.07 (~Rs 6)**, vs ~$0.086 (~Rs 7.6) before. 50 AI decisions/day ~ Rs 300.
+
+---
+
+## 2026-10-24: Sonnet 5.5 + one-call design + "more agentic" features + uplift model
+**User asked:** cut cost further (~Rs 1.5 target) but stay agentic and more personal; build A-G and train the
+prediction model before the dashboard. Premium English voice, no feedback buttons, no Hinglish.
+
+**Built:**
+- **One-call design** (`engine/candidates.py`): code builds a personalised menu (reminder, 2x/3x points, free
+  delivery, early access, favourite item, cart item, interest items, category %, flat, cashback), prices each one
+  and runs every rule except the message. The AI usually picks/adjusts one and proposes in its first reply.
+  Only the stable instructions + tools are cached (shared across customers).
+- **Model switched to Claude Sonnet 5.5** (effort medium), per-model prices in `engine/agent.py`.
+- **A. Interest products** (`features.py`): cart, wishlist (14d), search match + views (7d), repeat views; used in
+  the menu, in triggers and in messages ("Still thinking about the Aurae Sunscreen Lite?").
+- **B. Own ideas:** `estimate_profit` now prices up to 6 ideas in one call, with a rules check per idea.
+- **C. Triggers** (`engine/triggers.py`): cart_abandoned, product_interest, habit_break, points_expiring,
+  wallet_idle (+ followup, manual), strongest first, with suggested delays. `decide --auto-trigger`.
+- **D. Premium voice** (`config/brand_voice.yaml`), loaded into the cached system prompt.
+- **E. Honest deadlines:** "midnight / tonight / today" only if the real expiry matches (new rule
+  `message.honest_deadline`); the AI gets `hours_until_midnight_ist`.
+- **F. Verified loyalty:** "loyal customer" only if >= 5 orders (new rule `message.verified_loyalty`).
+- **G. Wait first:** new tool `propose_wait` (1-48h); `engine/followups.py` resolves it: bought on their own ->
+  `bought_naturally` (cost saved), else a new `followup` decision that can't wait again; the gatekeeper skips a
+  customer while the AI is waiting.
+- **Uplift model** (`engine/uplift.py`): T-learner on all 19,683 past offers (15,875 treatment / 3,808 holdout),
+  trained in 89s. Held-out AUC: control 0.847, treated 0.713. `harness/eval_uplift.py` against the hidden truth
+  (Spearman, 400 customers): formula 0.44, model 0.41, **blend 0.50** (best on 5/6 offer types) -> production uses
+  the average of model and formula. "Buys anyway" (control model) beats the formula: AUC 0.847 vs 0.731, better
+  calibrated (6.7% vs 8.8% predicted, 7.2% real).
+- **Tests:** 108 passing (new: `test_candidates.py`, `test_agentic.py`, `test_uplift.py`); tests hide the real key
+  and use the formula, never the trained model.
+
+**Real test (Sonnet, dry run, same moment as the first Opus run):**
+[docs/evidence/sonnet_agentic_run_2026-10-24.txt](docs/evidence/sonnet_agentic_run_2026-10-24.txt)
+| Customer | Opus (first run) | Sonnet now | Cost |
+|---|---|---|---|
+| Mansi (habit broken) | 3x points | 3x points | $0.089 -> $0.027 |
+| Aarohi (cart: lipstick) | free delivery | free delivery, message names the lipstick | $0.086 -> $0.018-0.028 |
+| Neha (lapsed, points expiring) | 3x points | 3x points, mentions expiring points | $0.106 -> $0.016 |
+| Khushi (regular, viewed atta) | wallet reminder | 3x points, mentions the atta | $0.065 -> $0.018 |
+| Farhan (wishlisted sunscreen) | - | free wallet reminder around the sunscreen | $0.019 |
+
+**Every decision used 1 API call (8-20s). Average ~Rs 1.7-1.9 per decision (Opus first run: ~Rs 7.6, -78%).**
+Khushi's decision changed because the model says her "buys anyway" chance is 5.6% (formula said 30%); the
+holdout check above shows the model is the more accurate of the two.
+
+**Fixes made after review:** item offers (favourite / cart / interest) use a Rs 499 minimum order; the AI
+personalises any offer around the product of interest; loyalty mentioned only when it's the point; voice examples
+varied (all 3 re-run messages opened with "Still thinking about...").
+
+**Known limits:** interest discounts on cheap items still often fail the Rs 20 minimum (honest economics); the
+AI then wraps a profitable offer around that product instead. Tone effects can't be measured by the simulation,
+only by real testers.
+
+**Next:** Session 4 (Telegram bot + simulator firing the new triggers and follow-ups). Needs the bot token.
