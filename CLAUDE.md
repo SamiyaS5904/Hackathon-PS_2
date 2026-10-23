@@ -54,17 +54,25 @@ There is **no customer-facing UI**. Customers only receive Telegram messages.
 
 Agent priorities, in order:
 1. **Habit break:** customer is overdue vs their usual order gap → offer on a favourite item/category
-2. **Cart abandoned:** offer tied to the item left in the cart
-3. **Zero-cost nudges:** points expiring, unused wallet balance, early access
+2. **Fresh interest:** item left in the cart, searched for, viewed repeatedly or wishlisted → offer on exactly that
+   product
+3. **Zero-cost nudges:** points expiring, unused wallet balance, early access, bonus points
 4. **Send nothing** to people who would buy anyway, or when no offer makes a profit
+
+**Timing ("knows when not to send"):** the agent may also decide to **wait** (`propose_wait`) when the customer may
+well buy on their own soon. A follow-up (`engine/followups.py`) looks again later: bought on their own → no offer
+cost spent; didn't buy → a new decision (which can't wait again).
 
 ---
 
 ## 2. Pipeline
 ```
 [1 DATA]       data/generate.py → SQLite (3,000 customers, 12 months, 13 tables)
-[2 ANALYST]    engine/features.py → one profile per customer
-[3 TRIGGER]    events/simulator.py  or  dashboard "Run agent"
+[1b MODEL]     engine/uplift.py → uplift model trained on past campaigns (treatment vs holdout), no API
+[2 ANALYST]    engine/features.py → one profile per customer (habit, interest products, loyalty...)
+[3 TRIGGER]    engine/triggers.py detects moments (cart, product interest, habit break, points, wallet);
+               events/simulator.py (Session 4) fires them live; or dashboard "Run agent"
+[3c MENU]      engine/candidates.py → personalised candidate offers, priced and rule-checked by code
 [3b GATEKEEPER] engine/gatekeeper.py (no API): skip customers no offer could pass (no consent, weekly limit hit,
                24h gap, circuit breaker); rank the rest by priority; check today's Day Plan. Within the plan →
                agent. Plan used up → fallback (free).
@@ -72,6 +80,7 @@ Agent priorities, in order:
 [5 RULES]      engine/rules.py: approve / repair / reject (reason back to agent, max 2 retries)
 [5b FALLBACK]  engine/fallback.py: if agent fails → simple rule table (also checked by rules.py)
 [6 DELIVERY]   bot/telegram_bot.py: linked tester → Telegram; others → "would send"
+[6b FOLLOW-UP] engine/followups.py: resolves "wait" decisions (bought on their own / new decision)
 [7 DASHBOARD]  api/main.py (FastAPI) → dashboard/ (React)
 [HARNESS]      harness/: proves all of the above
 ```
@@ -187,6 +196,8 @@ All values below are **starting values**.
 | Rule | If broken |
 |---|---|
 | Amount, expiry and product in the message must match the actual offer | ❌ reject |
+| A deadline in the message ("until midnight", "tonight", "today") must be true for the real expiry | ❌ reject |
+| "Loyal customer" only for customers who are loyal by the fairness definition (≥5 orders) | ❌ reject |
 | No fake urgency or scarcity ("only 1 left", "last chance", "hurry") | ❌ reject |
 | No claims that aren't in the catalog data | ❌ reject |
 | Max 300 characters, no links | ❌ reject |
@@ -226,7 +237,9 @@ message always matches the offer; no fake urgency):
 
 ## 5. Agent contract
 - **Tools:** `get_customer_profile`, `get_recent_activity`, `get_offer_history`, `get_offer_limits`,
-  `estimate_profit`, `propose_offer`, `propose_no_offer`.
+  `estimate_profit` (prices a list of up to 6 of the agent's own ideas in one call, with a rules check per idea),
+  `propose_offer`, `propose_no_offer`, `propose_wait` (wait 1-48h, then a follow-up; not allowed in a follow-up).
+- **Voice:** premium, warm, lightly playful, English (`config/brand_voice.yaml`, editable by marketing).
 - **Offer building blocks:** type (pct_off, flat_off, free_delivery, points_multiplier, cashback_to_wallet,
   early_access), amount, product/category, min order, expiry (2-48h), send time, message.
 - `get_customer_profile` includes habit signals (usual gap, overdue ratio, favourite items/categories) so the
@@ -256,8 +269,17 @@ message always matches the offer; no fake urgency):
 | 6 | `harness/simulate_profit.py` | agent+rules vs send-to-all vs fallback-only on a sample of customers, scored with hidden true responses | Yes (sample) | agent+rules > send-to-all, and > 0 |
 | 7 | `harness/test_rules_editing.py` | Editing a rule creates a new version, unsafe edits are refused, pending offers are re-checked, decisions record the version | No | 100% |
 
-Tests 1-4 and 7 run on every change (`pytest harness/`). Tests 5-6 run only when the user asks, on a small
-sample (default 30 customers), and save the agent's answers so re-runs are free.
+| 8 | `harness/test_candidates.py`, `test_agentic.py`, `test_uplift.py`, `test_agent.py` | Candidate menu, own-idea pricing, triggers, honest deadlines, verified loyalty, wait + follow-ups, uplift model plumbing, agent loop | No | 100% |
+| 9 | `harness/eval_uplift.py` | Uplift model vs formula vs blend, scored against the hidden truth (reads `customer_traits`) | No | blend beats both |
+
+Tests 1-4, 7 and 8 run on every change (`pytest harness/`). Tests 5-6 run only when the user asks, on a small
+sample (default 30 customers), and save the agent's answers so re-runs are free. The harness always hides the real
+API key and uses the hand-made formulas (not the trained model), so results never change between runs.
+
+**Uplift model (`engine/uplift.py`):** T-learner (control model on holdout rows, treated model on treatment rows,
+scikit-learn gradient boosting) trained on all 19,683 past campaign offers. Production uses the **average of model
+and formula** (best against the hidden truth: Spearman 0.50 vs 0.44 formula, 0.41 model). Rebuild:
+`python -m engine.uplift --train` (~90s, no API).
 
 ---
 
@@ -298,7 +320,7 @@ check with the user before moving on.
 | 1 | 1 | `config/offers.yaml`, `config/rules.yaml`, `db/schema.sql`, `data/generate.py` (full detailed dataset) | Looks at sample data and persona patterns |
 | 2 | 1 | `engine/features.py` (incl. habit signals), `engine/profit.py`, `engine/rules_store.py`, `engine/rules.py`, `engine/fallback.py` + `config/templates.yaml`, `engine/gatekeeper.py` (pre-filter + Day Plan), `engine/decide.py` (fallback-only) + rule tests | Runs a fallback decision from the command line |
 | 3 | 1 | `engine/agent.py` (Claude tools, reasoning, retry loop) wired into `decide.py` | Reads agent reasoning for 3-4 customers |
-| 4 | 1 | `bot/telegram_bot.py` (linking, re-linking, sending) + `events/simulator.py` | Gets a real offer on their own Telegram |
+| 4 | 1 | `bot/telegram_bot.py` (linking, re-linking, sending) + `events/simulator.py` (fires the trigger types from `engine/triggers.py`, runs `engine/followups.py` regularly) | Gets a real offer on their own Telegram |
 | 5 | 1 | `api/main.py` + dashboard: Overview, Decisions + reasoning drawer, Customers (Run agent), Testers (link / re-link), **Rules page (edit rules)**, **Plan your day** (greeting + AI decisions for today/tomorrow + cost estimate) | **Day 1 MVP demo** end to end |
 | 6 | 2 | Harness 1-6, fix everything it finds | Sees all tests green + profit report |
 | 7 | 2 | Uplift model for better P(buy), Guardrails page, circuit breaker, UI polish, clearer reasoning prompts | Reviews dashboard and reasoning quality |
@@ -357,7 +379,8 @@ python -m harness.simulate_profit --sample 300
 ```
 
 ## 15. Scope
-Out of scope: customer UI, mini shop/wallet for testers, bargaining, phone numbers, Telegram groups, extras.
+Out of scope: customer UI (including feedback buttons on Telegram messages), mini shop/wallet for testers,
+bargaining, phone numbers, Telegram groups, Hinglish messages, extras.
 
 ---
 
@@ -374,3 +397,7 @@ Out of scope: customer UI, mini shop/wallet for testers, bargaining, phone numbe
 7. **GitHub repo:** https://github.com/SamiyaS5904/Hackathon-PS_2 (small, clear commits, pushed after each step).
 8. **AI timeout (2026-10-23):** 30 seconds per API call. A timeout is only a deadline: it doesn't change the AI's
    output or the cost of a successful call; too short a timeout wastes calls and sends decisions to the fallback.
+9. **More agentic + personal (2026-10-24):** interest-based offers (search / views / wishlist / cart), the AI
+   prices its own ideas in one call, trigger detection, premium voice, honest deadlines, verified loyalty claims,
+   and "wait first" decisions with follow-ups. Uplift model trained before the dashboard.
+10. **Brand voice:** premium, warm, lightly playful, English only. No feedback button on Telegram messages.
