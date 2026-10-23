@@ -101,6 +101,8 @@ message:
     - "ending soon"
     - "act now"
     - "don't miss out"
+    - "before it's gone"
+    - "almost gone"
   banned_claims:                       # claims we can't back up with catalog data -> reject
     - "guaranteed"
     - "lowest price"

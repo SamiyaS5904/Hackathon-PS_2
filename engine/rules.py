@@ -430,6 +430,30 @@ def _message_checks(offer: OfferProposal, product, profile: CustomerProfile, rul
     claims = [phrase for phrase in m.get("banned_claims", []) if phrase in low]
     yield ("message.no_unbacked_claims", not claims,
            f"Claims we can't back up: {', '.join(claims)}." if claims else "No unbacked claims.")
+
+    # Honest deadlines: a real deadline is fine ("valid until midnight"), a fake one is not. The words are allowed
+    # only if the offer really ends then (checked after any quiet-hours change to the send time).
+    if offer.send_at and any(w in low for w in ("midnight", "tonight", "today")):
+        send = to_ist(offer.send_at)
+        ends = to_ist(offer.send_at + timedelta(hours=offer.expiry_hours))
+        latest = datetime.combine(send.date() + timedelta(days=1), time(0, 59), tzinfo=IST)
+        earliest_midnight = datetime.combine(send.date(), time(23, 0), tzinfo=IST)
+        problems = []
+        if ("midnight" in low or "tonight" in low) and not earliest_midnight <= ends <= latest:
+            problems.append(f"says midnight/tonight, but the offer ends {ends:%d %b %H:%M} IST")
+        if "today" in low and ends > latest:
+            problems.append(f"says today, but the offer ends {ends:%d %b %H:%M} IST")
+        yield ("message.honest_deadline", not problems,
+               ("Deadline in the message is not true: " + "; ".join(problems) + ".") if problems
+               else f"Deadline in the message is true (offer ends {ends:%d %b %H:%M} IST).")
+
+    # Verified loyalty: "loyal customer" may only be said to customers who really are loyal by the rules' definition
+    if "loyal" in low:
+        loyal = profile.total_orders >= rules.fairness["loyal_min_orders"]
+        yield ("message.verified_loyalty", loyal,
+               f"Customer has {profile.total_orders} orders (loyal from {rules.fairness['loyal_min_orders']})."
+               if loyal else f"Message calls them loyal, but they have only {profile.total_orders} orders "
+                             f"(loyal from {rules.fairness['loyal_min_orders']}).")
     if not m["must_match_offer"]:
         return
 
