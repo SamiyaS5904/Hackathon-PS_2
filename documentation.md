@@ -250,3 +250,22 @@ the timeout was 45s (`AGENT_TIMEOUT_SECONDS=45`) to measure real speed.
    "favourite category" priority literally. Defensible, but worth discussing whether profit should win ties.
 
 **Next:** decide on the timeout, then Session 4 (Telegram bot + simulator).
+
+---
+
+## 2026-10-23: AI timeout raised to 30 seconds
+**Changed:** timeout per AI call 10s -> **30s**, approved by the user. Updated in CLAUDE.md (section 3 and
+decision 8), `engine/agent.py` default, `.env.example`, PLAN.md, and the user's local `.env`
+(`AGENT_TIMEOUT_SECONDS=30`; only that line touched).
+
+**Why:** in the real run, 4 of 16 calls took 11.5-15.1s; the longest is always the last call (writing the offer,
+message and reasoning). A timeout is only a deadline: it doesn't change the AI's output or the cost of a call that
+finishes. A too-short timeout throws away paid calls and sends decisions to the weaker fallback. 30s leaves room for
+slower API moments.
+
+**Also fixed:** once a real key existed, one test (`test_pipeline_without_api_key_uses_fallback`) made a real API
+call (~Rs 8; it only wrote to its temporary test database). New autouse fixture `no_real_api_key` in
+`harness/conftest.py` hides the key from all tests, so the harness can never call the real API. 82 tests pass in ~6s.
+
+**Pending user decision:** optimization "give the agent the profile + limits up front" (saves ~1 call per
+decision, est. 15-20% cheaper and 3-5s faster, same output). Not done yet: waiting for a yes.
