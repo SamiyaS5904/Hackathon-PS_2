@@ -14,11 +14,14 @@ Run: pytest harness/test_agent.py -v
 
 from __future__ import annotations
 
+import json
+
 from engine.agent import MAX_API_CALLS, AgentContext, run_agent
 from engine.decide import decide
 from engine.gatekeeper import agent_runs_used, set_day_plan
 from harness.conftest import NOON_IST, make_profile
-from harness.fake_agent import REASONING, Response, ScriptedClient, estimate_input, offer_input, text_only, tool_call
+from harness.fake_agent import (REASONING, Response, ScriptedClient, Usage, estimate_input, offer_input,
+                                text_only, tool_call)
 
 
 def context(profile, catalog, rules, state, now) -> AgentContext:
@@ -114,8 +117,8 @@ def test_tools_return_profile_and_limits(profile, catalog, rules, state, now):
 
     client = ScriptedClient([tool_call("get_offer_limits"), capture_then_decide])
     run_agent(context(profile, catalog, rules, state, now), client=client)
-    text = seen["results"][0]["content"]
-    assert '"category_discount_cap_pct"' in text and '"electronics": 8' in text
+    limits = json.loads(seen["results"][0]["content"])
+    assert limits["category_discount_cap_pct"]["electronics"] == 8
 
 
 def test_buys_anyway_customer_only_sees_perks_in_limits(catalog, rules, state, now):
@@ -127,7 +130,31 @@ def test_buys_anyway_customer_only_sees_perks_in_limits(catalog, rules, state, n
 
     profile = make_profile(p_buy_48h_no_offer=0.85)
     run_agent(context(profile, catalog, rules, state, now), client=ScriptedClient([tool_call("get_offer_limits"), capture]))
-    assert '"discounts_allowed": false' in seen["text"] and '"pct_off"' not in seen["text"].split("buys_anyway")[0]
+    limits = json.loads(seen["text"])
+    assert limits["buys_anyway"]["discounts_allowed"] is False
+    assert "pct_off" not in limits["allowed_offer_types"] and "points_multiplier" in limits["allowed_offer_types"]
+
+
+def test_first_message_already_contains_profile_and_limits(profile, catalog, rules, state, now):
+    """Cost saving: the agent gets profile + limits up front instead of spending an API call to fetch them."""
+    client = ScriptedClient([tool_call("propose_no_offer", {"reasoning": REASONING})])
+    run_agent(context(profile, catalog, rules, state, now), client=client)
+    first = client.calls[0]["messages"][0]["content"]
+    profile_json = first.split("<customer_profile>")[1].split("</customer_profile>")[0]
+    limits_json = first.split("<offer_limits>")[1].split("</offer_limits>")[0]
+    assert json.loads(profile_json)["first_name"] == "Riya"
+    assert json.loads(limits_json)["margin_floor_pct"] == 10
+    assert ": " not in profile_json  # compact JSON (fewer tokens)
+
+
+def test_cache_tokens_and_calls_are_tracked(profile, catalog, rules, state, now):
+    cached = Usage(input_tokens=300, output_tokens=200, cache_creation_input_tokens=0, cache_read_input_tokens=4000)
+    step = tool_call("propose_no_offer", {"reasoning": REASONING})
+    step.usage = cached
+    out = run_agent(context(profile, catalog, rules, state, now), client=ScriptedClient([step]))
+    assert out.api_calls == 1 and out.cache_read_tokens == 4000 and out.input_tokens == 4300
+    # 300 x $4 + 4000 x $0.20 + 200 x $20, per million tokens
+    assert abs(out.cost_usd - (300 * 4 + 4000 * 0.20 + 200 * 20) / 1_000_000) < 1e-6
 
 
 # --- through the full pipeline (small real database) ---------------------------------------------
