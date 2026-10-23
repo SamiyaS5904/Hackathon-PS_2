@@ -25,6 +25,22 @@ from engine.rules_store import ActiveRules, load_default_rules
 NOON_IST = datetime(2026, 10, 23, 6, 30, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def no_real_api_key(monkeypatch):
+    """
+    Tests must NEVER call the real Claude API (cost, speed, repeatability). This hides the key from every module
+    that reads it, so code behaves as if there's no key. Tests that need the agent pass a fake client instead.
+    """
+    import dataclasses
+
+    import engine.agent
+    import engine.gatekeeper
+
+    no_key = dataclasses.replace(engine.gatekeeper.settings, anthropic_api_key="")
+    monkeypatch.setattr(engine.gatekeeper, "settings", no_key)
+    monkeypatch.setattr(engine.agent, "settings", no_key)
+
+
 @pytest.fixture
 def now() -> datetime:
     return NOON_IST
