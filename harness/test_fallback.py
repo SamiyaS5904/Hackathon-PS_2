@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
+
 from engine.decide import decide
+from harness.fake_agent import Response, ScriptedClient, offer_input, text_only, tool_call
 from engine.fallback import fallback_decide
 from engine.gatekeeper import get_day_plan, set_day_plan
 from engine.rules import RuleState
@@ -87,6 +90,39 @@ def test_no_consent_is_skipped_by_gatekeeper(db):
         row = (1,)
     outcome = decide(db, row[0], now=NOON_IST)
     assert outcome.decided_by == "gatekeeper" and "agreed" in outcome.reasoning["summary"]
+
+
+@pytest.mark.parametrize("label, steps", [
+    ("API down", [ConnectionError("network down")]),
+    ("timeout", [TimeoutError("too slow")]),
+    ("junk output", [text_only("Let me think about a nice discount...")]),
+    ("refusal", [Response([], "refusal")]),
+    ("2 rejections", [tool_call("propose_offer", offer_input(message="Hurry! 15% off fashion above ₹999.")),
+                      tool_call("propose_offer", offer_input(message="Hurry! 15% off fashion above ₹999."))]),
+])
+def test_every_ai_failure_hands_over_to_checked_fallback(db, label, steps):
+    """Whatever goes wrong with the AI, the free rules decide, and their offer is still checked by the rules."""
+    customer_id = db.execute("SELECT id FROM customers WHERE marketing_consent = 1 LIMIT 1").fetchone()[0]
+    out = decide(db, customer_id, now=NOON_IST, agent_client=ScriptedClient(steps))
+    assert out.decided_by == "fallback", label
+    assert out.reasoning["agent_attempt"]["error"], label
+    if out.offer:
+        assert out.rule_checks and all(c["result"] != "failed" for c in out.rule_checks), label
+    if label == "2 rejections" and not out.offer:
+        assert out.status == "blocked"  # counts towards the circuit breaker
+
+
+def test_circuit_breaker_pauses_everything(db):
+    """More than half of the last 20 decisions blocked -> offers pause before any AI call."""
+    customer_id = db.execute("SELECT id FROM customers WHERE marketing_consent = 1 LIMIT 1").fetchone()[0]
+    for _ in range(20):
+        db.execute("INSERT INTO decisions (customer_id, created_at, trigger_type, decided_by, status, reasoning, "
+                   "rule_checks, rules_version) VALUES (?, '2026-10-23T05:00:00Z', 'manual', 'agent', 'blocked', "
+                   "'{}', '[]', 1)", (customer_id + 1,))
+    db.commit()
+    client = ScriptedClient([])
+    out = decide(db, customer_id, now=NOON_IST, agent_client=client)
+    assert out.decided_by == "gatekeeper" and "Circuit breaker" in out.reasoning["summary"] and client.calls == []
 
 
 def test_day_plan_is_capped_by_env_ceiling(db):
