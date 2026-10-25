@@ -50,6 +50,8 @@ BASE_UPLIFT: dict[str, float] = {
     "reminder": 0.02,            # never tested in a campaign: kept below early access on purpose
 }
 MAX_UPLIFT = 0.60
+HIGH_VALUE_ORDER_RUPEES = 2500                 # usual order at or above this = a high-value customer
+FREE_DELIVERY_FULL_EFFECT_UP_TO_RUPEES = 1200  # above this usual order size, free delivery matters less and less
 MAX_P_BUY = 0.95
 
 
@@ -164,6 +166,14 @@ def formula_uplift(offer: OfferProposal, profile: CustomerProfile, catalog: Cata
         uplift *= 0.75 + 0.5 * deal_seeking
     if (profile.overdue_ratio or 0) >= 1.3 and profile.total_orders >= 3:
         uplift *= 1.5                                           # a breaking habit: a nudge now can save it
+        if t in ("pct_off", "flat_off", "cashback_to_wallet") and usual >= HIGH_VALUE_ORDER_RUPEES:
+            # measured in past campaigns: late, high-value customers reacted to % off ~2.5x more than on-time
+            # ones (+16 pts vs +6), so a real discount is what wins a lapsing VIP back, not a small perk
+            uplift *= 1.5
+    if t == "free_delivery":
+        # Rs 40 delivery matters on a Rs 800 order, hardly on a Rs 4,000 one (measured: +5.3 pts for smaller
+        # baskets, +0.8 for big ones). An open cart is handled below: there the fee is often the reason.
+        uplift *= min(1.0, max(0.25, FREE_DELIVERY_FULL_EFFECT_UP_TO_RUPEES / usual))
     favourite_ids = {f["product_id"] for f in profile.favourite_items}
     if offer.product_id in favourite_ids:
         uplift *= 1.3                                           # an offer on something they love works better
