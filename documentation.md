@@ -511,3 +511,36 @@ Session 7.
   points for them. To look at in Session 7 (prompt + how VIP comeback discounts are priced).
 
 **Next:** Session 7 (guardrails page, circuit breaker UI, polish, reasoning prompt tuning incl. VIP comebacks).
+
+## 2026-10-25: Session 7: Guardrails page, VIP comeback pricing, harness proof on the dashboard
+**Built:**
+- `engine/guardrails.py` + `GET /api/guardrails` (read-only report): circuit-breaker gauges (today's budget, blocked
+  share of the last 20 decisions), daily / monthly budget used, customers closest to the per-customer cap, what each
+  rule caught in three layers (options blocked in the code-priced menu before the AI saw them, AI proposals sent
+  back with the reason, safe repairs on offers that went out), grouped gatekeeper-skip and fallback reasons, the
+  headline limits in force, and the latest harness results.
+- Dashboard **Guardrails** page (sidebar, between Testers and Rules): circuit breaker status + meters, budgets,
+  **Proof** card (tests passed, AI scenarios, true profit per policy with AI + rules highlighted), four counters,
+  "What each rule caught" stacked bar chart (3-colour set validated on the dark surface, kept apart from the
+  decider colours), skip / fallback reasons, limits in force with a link to edit.
+- Harness now saves its latest results in `harness/results/` (git-ignored): `pytest` (full runs only),
+  `simulate_profit`, `eval_agent_scenarios`. The AI-scenario cart is now the same product on every run (seeded), so
+  re-runs reuse saved answers instead of paying again (found because a re-run cost Rs 4).
+- `harness/test_guardrails_report.py`: 4 tests (layers counted per rule, budgets, breaker gauge + trip, reason
+  groups, API). **167 tests pass.**
+
+**VIP comeback pricing (`engine/profit.py`), from campaign data, not the hidden truth:**
+the Session 6 simulation showed about-to-leave VIPs getting points / free delivery (AI + rules Rs 144 vs send-to-all
+Rs 262). Comparing the menu's estimates with the truth showed discounts under-rated (est Rs 27-44, true Rs 72-121) and
+free delivery over-rated for big baskets. Past campaigns agree: late, high-value customers reacted to % off with
++16 pts (vs +6 on time) and to free delivery with only +6; on-time high-value customers +0.8 for free delivery.
+Changes: extra x1.5 for money discounts when a high-value customer's habit is breaking; free delivery's effect
+shrinks as the usual order grows above Rs 1,200. Free check: VIP formula estimate 0.115 -> 0.167 (truth 0.321),
+other personas unchanged, ranking quality 0.51 -> 0.52. The VIP menus now put a real discount first.
+
+**Not yet verified with the real AI:** the menus changed, so saved AI answers no longer apply; the profit simulation
+and 16 scenarios need a paid re-run (~Rs 42). The Proof card shows the Session 6 results until then.
+
+**Checked in the browser:** page loads with real data, no sideways scroll at 1024px, profit bars and rule chart draw.
+
+**Next:** paid re-run of harness 5-6 (on the user's OK), then Session 8: real tester rollout per TESTING.md.

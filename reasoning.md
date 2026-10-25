@@ -299,6 +299,10 @@ discount. The AI was right given our numbers; the numbers were wrong. So the for
 from what past campaigns actually measured (treatment vs holdout), not from guesses. Lesson: the AI is only as good
 as the prices on its menu, which is why profit maths is code we can test against data.
 
+**Lapsing VIPs and big baskets (Session 7):** the same method found two more blind spots. A real discount is what
+wins back a high-value customer whose habit is breaking (campaigns: +16 pts vs +6 on time), while Rs 40 free
+delivery means little on a Rs 4,000 basket. Both are now in the formula, each with the campaign number beside it.
+
 ## 20. Why "knows when not to send" (waiting) and verified claims
 **Waiting:** if a customer may buy on their own soon, an offer only gives margin away. The AI can wait 1-48h; a
 follow-up then checks: bought -> nothing was spent; didn't buy -> a new decision (which can't wait again). This is
@@ -318,3 +322,10 @@ improvement can be tested immediately.
 
 **How:** Day 1 builds every pipeline stage in a simple form. Day 2 adds the harness, a trained uplift model,
 guardrail stats, UI polish and real-tester rollout.
+
+## 22. Why a Guardrails page
+**Why:** "the rules protect profit" is a claim; a manager needs to see it. The page shows, with counts and reasons,
+what was blocked before the AI could choose it, what the AI proposed that the rules sent back, what was repaired,
+how close the budgets and the circuit breaker are, and the latest harness proof (tests, AI scenarios, true profit).
+**How:** read-only (`engine/guardrails.py`), straight from the decisions table and the harness results files; it
+can never change a decision.
