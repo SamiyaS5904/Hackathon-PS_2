@@ -1,19 +1,21 @@
 // App shell: sidebar navigation + top bar (AI usage today, model, bot) + the pages.
 import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { CalendarClock, ListChecks, Scale, Send, Users } from "lucide-react";
+import { CalendarClock, ListChecks, Scale, Send, ShieldCheck, Users } from "lucide-react";
 import { api } from "./api";
 import Today from "./pages/Today";
 import Decisions from "./pages/Decisions";
 import Customers from "./pages/Customers";
 import Testers from "./pages/Testers";
 import Rules from "./pages/Rules";
+import Guardrails from "./pages/Guardrails";
 
 const NAV = [
   { to: "/", label: "Today", icon: CalendarClock },
   { to: "/decisions", label: "Decisions", icon: ListChecks },
   { to: "/customers", label: "Customers", icon: Users },
   { to: "/testers", label: "Testers", icon: Send },
+  { to: "/guardrails", label: "Guardrails", icon: ShieldCheck },
   { to: "/rules", label: "Rules", icon: Scale },
 ];
 
@@ -85,6 +87,7 @@ export default function App() {
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/testers" element={<Testers />} />
+            <Route path="/guardrails" element={<Guardrails />} />
             <Route path="/rules" element={<Rules />} />
           </Routes>
         </div>

@@ -43,4 +43,5 @@ export const api = {
   saveRules: (changes, changedBy, note) =>
     request("/rules", { method: "PUT", body: { changes, changed_by: changedBy, note } }),
   runFollowups: () => request("/followups/run", { method: "POST" }),
+  guardrails: () => request("/guardrails"),
 };
