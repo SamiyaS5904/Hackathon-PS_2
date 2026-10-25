@@ -69,9 +69,14 @@ def agent_runs_used(conn: sqlite3.Connection, now: datetime) -> int:
 
 
 def average_ai_cost_usd(conn: sqlite3.Connection, last_n: int = 20) -> float:
-    """Average real cost of the last AI decisions (from logged token usage), or the starting estimate."""
-    rows = [r[0] for r in conn.execute("SELECT cost_usd FROM decisions WHERE cost_usd IS NOT NULL AND cost_usd > 0 "
-                                       "ORDER BY id DESC LIMIT ?", (last_n,))]
+    """
+    Average real cost of the last AI decisions made with the CURRENT one-call design (they carry the candidate
+    menu in their reasoning), so older multi-call / Opus decisions don't inflate the estimate. Falls back to the
+    starting estimate when there are none yet.
+    """
+    rows = [r[0] for r in conn.execute(
+        "SELECT cost_usd FROM decisions WHERE cost_usd > 0 AND reasoning LIKE '%candidates_prepared_by_code%' "
+        "ORDER BY id DESC LIMIT ?", (last_n,))]
     return sum(rows) / len(rows) if rows else EST_COST_PER_DECISION_USD
 
 
