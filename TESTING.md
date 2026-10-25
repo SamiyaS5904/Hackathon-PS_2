@@ -23,7 +23,8 @@ pytest harness/
 Agent quality checks:
 ```bash
 python -m harness.eval_agent_scenarios     # 16 golden cases, 2 per persona → target ≥ 14/16
-python -m harness.simulate_profit --sample 300   # agent+rules vs send-to-all vs fallback-only
+python -m harness.simulate_profit                # agent+rules vs send-to-all vs fallback-only (24 customers)
+python -m harness.eval_segments                  # free: do the Testers page profiles match the hidden personas?
 ```
 Expected: agent+rules makes **more profit than send-to-all**, and its total profit is **above zero**.
 
@@ -60,53 +61,59 @@ python -m events.simulator fire search --customer 2942 --query lipstick
 ```
 
 ### Step 1: Test on yourself
-1. Dashboard → **Testers** → enter your Telegram username → pick a customer with persona **about-to-leave VIP**
-   → **Create link**.
-2. Scan the QR code / open the link on your phone → press **Start** → the bot says you're linked.
-   If nothing happens, open the bot in Telegram and send the `/start <code>` shown next to the QR code.
-3. Dashboard → **Customers** → open that customer → **Run agent**.
-4. ✅ Check: an offer arrives on your Telegram.
-5. ✅ Check: in **Decisions**, open the card → the drawer shows summary, signals used, alternatives, expected
-   impact, why now, rule checks, profit math.
+1. Dashboard → **Testers** → **Pick a profile to play** → **About-to-leave VIP** → click a customer.
+   (Profiles are found from what the company can see: habit, spend, carts, points. They match the hidden personas
+   86% of the time: `python -m harness.eval_segments`.)
+2. Already linked? Click **Re-link** on your row (the picked customer is filled in). New? Type your username in
+   **Add a tester** → **Create link** → scan the QR / open the link → press **Start**.
+   If nothing happens, send the `/start <code>` shown next to the QR code to the bot.
+3. Dashboard → **Customers** → open that customer → **Run AI agent**.
+4. ✅ An offer arrives on your Telegram within ~15 seconds (the bot delivers every 15s).
+5. ✅ **Decisions** → open the card: summary, facts used, rejected options, impact, why now, the code-priced menu
+   with the chosen option, every rule check.
 
-### Step 2: 2-3 friends, different personas
-| Tester | Persona to link | What we expect |
+### Step 2: 2-3 friends, different profiles
+Each friend: you add them on **Testers** with their username + a picked profile, send them their QR / link, they
+press **Start** once. Then **Run AI agent** for each.
+
+| Tester | Profile to play | Sensible AI decision |
 |---|---|---|
-| You | about-to-leave VIP | Comeback-style offer |
-| Friend 1 | deal hunter | Discount or cashback, within caps |
-| Friend 2 | loyal regular | Often **nothing**, or a zero-cost perk (points / early access) |
-| Friend 3 | cart abandoner | Offer tied to the item left in cart |
+| You | About-to-leave VIP | A real comeback offer (discount on their category / favourite) |
+| Friend 1 | Deal hunter | A discount within the caps |
+| Friend 2 | Loyal regular | Often **nothing**, or a zero-cost perk (points / early access) |
+| Friend 3 | Cart abandoner | Simulate a cart on **Customers** first → an offer tied to that cart, or a deliberate wait |
 
-Fire the **same event** (for example "cart abandoned") for everyone.
-✅ Check: decisions are **different** for different people. That shows it's personalised, not one-size-fits-all.
+✅ Different people get **different** decisions, each with its own reasoning. A loyal regular getting nothing is a
+**correct** result: the rules and the AI refuse to give margin away to someone who buys anyway.
 
-### Step 2b: Re-link demo (same friend, different customer)
-1. Dashboard → **Testers** → pick Friend 2 (linked to "loyal regular") → **Re-link** → choose an
-   "about-to-leave VIP" profile.
-2. Run agent for that new profile.
-3. ✅ Check: Friend 2's Telegram now gets a **different** offer (e.g. a comeback offer instead of nothing).
-4. ✅ Check: the dashboard reasoning explains the difference (signals like "40 days inactive", "high past spend").
+### Step 2b: Re-link demo (same friend, different customer) - the key demo moment
+1. **Testers** → **Pick a profile** → **About-to-leave VIP** → click one.
+2. On Friend 2's row (was the loyal regular) → **Re-link** (customer already filled in).
+3. **Customers** → that VIP → **Run AI agent**.
+4. ✅ Friend 2's Telegram now gets a comeback offer, where before they got nothing / a perk.
+5. ✅ The reasoning explains the difference ("last order 60 days ago vs usual 10", "lifetime spend Rs 1 lakh").
+
+Note: each customer can get at most 2 offers in 7 days, 24h apart. To repeat a demo, pick a **fresh** profile
+rather than running the same customer again (the picker only shows customers with nothing decided in 7 days).
 
 ### Step 3: Guardrail checks, live
-| Try this | Expected result |
-|---|---|
-| Fire 3 events in one hour for the same tester | Only **1** offer sent (24h gap, max 2/week) |
-| Fire an event at 23:00 | Send time moved to **08:00** (quiet hours) |
-| Set a tiny daily budget in `config/rules.yaml` | **Circuit breaker** pauses offers; dashboard shows it |
-| Customer with `marketing_consent = false` | Nothing sent |
+| Try this | Expected result | Where to see it |
+|---|---|---|
+| Run agent twice in a row for the same customer | 2nd run: **skipped** by the gatekeeper (24h gap), no AI cost | Decisions, Guardrails → "Why the gatekeeper skipped" |
+| Run agent at 23:00 IST | Send time moved to **08:00** (quiet hours repair) | Decision drawer → rule checks |
+| Rules page: set the daily budget to Rs 1 → run agent | **Circuit breaker** pauses offers | Today banner, Guardrails page (set it back after!) |
+| Customer with no marketing consent | Skipped, nothing sent | Decisions |
 
-### Step 4: Fallback check
-1. Remove or break `ANTHROPIC_API_KEY` in `.env` and restart.
-2. Run agent for a tester.
-3. ✅ Check: a safe offer still arrives (or "nothing" if no rule fits), marked **decided_by: fallback** on the
-   dashboard, and it still passed the rules check.
+### Step 4: Fallback check (no API)
+1. **Customers** → a customer → **Free rules only** (or remove `ANTHROPIC_API_KEY` from `.env` and restart).
+2. ✅ A safe template offer (or "nothing" if no rule fits), marked **Free rules**, still passed every rule check.
 
 ### Step 5: Record results
-Keep a simple table:
+Fill this in during the session (the dashboard has every detail; this is the summary for the judges):
 
-| Tester | Persona | Event | Decision | Decided by | Correct? | Notes |
-|---|---|---|---|---|---|---|
-| | | | | | | |
+| Tester | Profile | Event | Decision | Decided by | Telegram received? | Sensible? | Notes |
+|---|---|---|---|---|---|---|---|
+| | | | | | | | |
 
 ---
 
