@@ -36,6 +36,7 @@ export const api = {
   runAgent: (id, useAgent = true) => request(`/customers/${id}/run`, { method: "POST", body: { use_agent: useAgent } }),
   fireEvent: (id, body) => request(`/customers/${id}/events`, { method: "POST", body }),
   testers: () => request("/testers"),
+  testerProfiles: () => request("/testers/profiles"),
   addTester: (username, customerId) => request("/testers", { method: "POST", body: { username, customer_id: customerId } }),
   relink: (username, customerId) =>
     request(`/testers/${encodeURIComponent(username)}/relink`, { method: "POST", body: { customer_id: customerId } }),

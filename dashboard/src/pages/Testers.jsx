@@ -1,12 +1,14 @@
 // Testers: real people who receive offers on Telegram, each playing one customer profile.
 // Create a personal link (QR + /start code, because a plain link click doesn't always reach the bot),
 // and re-link a tester to another customer to show "same person, different customer, different offer".
+// "Pick a profile to play" lists clear examples per segment (found by visible signals, never hidden personas):
+// click one, then create a link or re-link a tester to it.
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Check, Copy, Link2, Repeat } from "lucide-react";
+import { Check, Copy, Link2, Repeat, UserRound } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { ist } from "../format";
+import { inr, ist, pct } from "../format";
 import { Badge, Button, Card, Empty, ErrorBox, Input, Spinner } from "../components/ui";
 
 function CopyField({ value }) {
@@ -24,8 +26,9 @@ function CopyField({ value }) {
   );
 }
 
-function Relink({ tester, onDone }) {
+function Relink({ tester, picked, onDone }) {
   const [customerId, setCustomerId] = useState("");
+  useEffect(() => { if (picked) setCustomerId(String(picked.id)); }, [picked]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const go = async () => {
@@ -52,6 +55,44 @@ function Relink({ tester, onDone }) {
   );
 }
 
+function ProfilePicker({ picked, onPick }) {
+  const [segments, setSegments] = useState(null);
+  const [active, setActive] = useState(0);
+  const [error, setError] = useState(null);
+  useEffect(() => { api.testerProfiles().then(setSegments).catch(setError); }, []);
+  if (error) return <ErrorBox error={error} />;
+  if (!segments) return <Spinner label="Finding good profiles (a few seconds)" />;
+  const seg = segments[active];
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {segments.map((s, i) => (
+          <button key={s.key} onClick={() => setActive(i)}
+                  className={`rounded-full px-3 py-1 text-xs transition ${i === active ? "bg-accent text-white" : "bg-raised text-ink2 hover:text-ink"}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-muted">Recognised by: {seg.signals}. Sensible AI decision: <span className="text-ink2">{seg.expect}</span>.</p>
+      {seg.customers.length === 0 ? <p className="mt-3 text-sm text-muted">No free profile in this segment right now.</p> : (
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {seg.customers.map((c) => {
+            const on = picked?.id === c.id;
+            return (
+              <button key={c.id} onClick={() => onPick({ ...c, segment: seg.label })}
+                      className={`rounded-lg border p-3 text-left transition ${on ? "border-accent bg-accent/10" : "border-hairline bg-raised/40 hover:border-baseline"}`}>
+                <div className="flex items-center gap-2 text-sm text-ink"><UserRound size={14} className="text-muted" /> {c.name} <span className="text-muted">#{c.id}</span></div>
+                <div className="mt-1 text-xs text-ink2">{c.city} · {c.orders} orders · {inr(c.spend_rupees)}</div>
+                <div className="mt-0.5 text-xs text-muted">{c.habit_status} · buys anyway {pct(c.buys_anyway)}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Testers() {
   const [testers, setTesters] = useState(null);
   const [username, setUsername] = useState("");
@@ -59,7 +100,9 @@ export default function Testers() {
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [picked, setPicked] = useState(null);
 
+  const pick = (profile) => { setPicked(profile); setCustomerId(String(profile.id)); };
   const load = () => api.testers().then(setTesters).catch(setError);
   useEffect(() => { load(); }, []);
 
@@ -84,6 +127,10 @@ export default function Testers() {
         <h1 className="text-2xl font-semibold">Testers</h1>
         <p className="mt-1 text-sm text-muted">Classmates who receive real offers on Telegram. Each one plays a customer from the dataset.</p>
       </div>
+
+      <Card title="Pick a profile to play" subtitle="Clear examples of each kind of customer, found from what the company can see. Click one, then add a tester or re-link one below.">
+        <ProfilePicker picked={picked} onPick={pick} />
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Add a tester" subtitle="A Telegram bot can't message anyone first: the tester opens their link and presses Start once.">
@@ -115,7 +162,7 @@ export default function Testers() {
         )}
       </div>
 
-      <Card title="Testers" subtitle="Re-link a tester to another customer: the next decision for that customer goes to the same person">
+      <Card title="Testers" subtitle={picked ? `Re-link fills in ${picked.name} #${picked.id} (${picked.segment}). The next decision for that customer goes to this person.` : "Re-link a tester to another customer: the next decision for that customer goes to the same person"}>
         {!testers ? <Spinner /> : testers.length === 0 ? <Empty>No testers yet.</Empty> : (
           <div className="divide-y divide-hairline">
             {testers.map((t) => (
@@ -128,7 +175,7 @@ export default function Testers() {
                 <div className="flex-1 text-sm text-ink2">
                   plays <Link to={`/customers?id=${t.customer_id}`} className="text-[#86b6ef] hover:underline">{t.customer} (#{t.customer_id})</Link>
                 </div>
-                <Relink tester={t} onDone={load} />
+                <Relink tester={t} picked={picked} onDone={load} />
               </div>
             ))}
           </div>
