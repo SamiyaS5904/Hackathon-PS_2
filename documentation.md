@@ -456,7 +456,7 @@ verified by tests, not on the real database, to keep the demo's version history 
 **How to run the demo:**
 ```bash
 cd dashboard && npm install && npm run build && cd ..   # once (and after dashboard changes)
-python -m uvicorn api.main:app --port 8000              # terminal 1 -> open http://localhost:8000
+python -m uvicorn api.main:app --port 8010              # terminal 1 -> open http://127.0.0.1:8010
 python -u -m bot.telegram_bot                            # terminal 2 -> Telegram delivery
 ```
 (For dashboard development with hot reload: `cd dashboard && npm run dev` -> http://localhost:5173, API on :8000.)

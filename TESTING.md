@@ -44,10 +44,10 @@ Expected: agent+rules makes **more profit than send-to-all**, and its total prof
 3. Start everything:
    ```bash
    cd dashboard && npm install && npm run build && cd ..   # once, and after dashboard changes
-   python -m uvicorn api.main:app --port 8000              # dashboard + API at http://localhost:8000
+   python -m uvicorn api.main:app --port 8010              # dashboard + API at http://127.0.0.1:8010
    python -u -m bot.telegram_bot                            # keep running: delivers offers to Telegram
    ```
-   If port 8000 is busy, use `--port 8010` and open http://localhost:8010.
+   Port 8010 is used because 8000 is taken by another project on this laptop.
 
 **Before the dashboard exists (Session 4), the same steps work from the command line:**
 ```bash

@@ -5,8 +5,8 @@ Where it sits: STEP 7. It reads the database and calls the engine; it contains n
     dashboard (React) -> /api/... -> engine (decide, rules, gatekeeper, testers, simulator) -> SQLite
 
 Run:
-    uvicorn api.main:app --reload            # API on http://localhost:8000 (docs at /docs)
-If the dashboard has been built (cd dashboard && npm run build), it is also served at http://localhost:8000/.
+    uvicorn api.main:app --port 8010         # API on http://127.0.0.1:8010 (docs at /docs)
+If the dashboard has been built (cd dashboard && npm run build), it is also served at http://127.0.0.1:8010/.
 
 What the endpoints cover (CLAUDE.md section 9, Session 5):
   /api/day-plan     greeting + "Plan your day": AI decisions allowed today/tomorrow, used so far, cost estimate
