@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from functools import lru_cache
 from collections import defaultdict
 from datetime import timedelta
 
@@ -66,8 +67,20 @@ def _loads(value: str | None, default):
     return json.loads(value) if value else default
 
 
+@lru_cache(maxsize=1)
+def _catalog():
+    """The product catalog never changes while the API runs, so it's loaded once."""
+    return load_catalog(connect())
+
+
 def _offer_text(final_offer: str | None) -> str | None:
-    return OfferProposal.model_validate_json(final_offer).describe() if final_offer else None
+    """'10% off on Glowveda Lipstick Neo (min order Rs 499)' instead of 'product #139'."""
+    if not final_offer:
+        return None
+    offer = OfferProposal.model_validate_json(final_offer)
+    text = offer.describe()
+    product = _catalog().get(offer.product_id)
+    return text.replace(f"product #{offer.product_id}", product.name) if product else text
 
 
 def _decision_row(r: sqlite3.Row) -> dict:
@@ -264,8 +277,16 @@ def suggested_customers(refresh: bool = False) -> list[dict]:
                         "trigger_label": TRIGGER_TYPES[t.type], "strength": t.strength, "detail": t.detail,
                         "habit_status": p.habit_status, "orders": p.total_orders,
                         "buys_anyway": p.p_buy_48h_no_offer})
-    out.sort(key=lambda x: -x["strength"])
-    _suggest_cache.update(at=time.time(), data=out[:15])
+    # Mix the trigger types (strongest of each type in turn), so the list shows different kinds of moments
+    by_type: dict[str, list] = defaultdict(list)
+    for item in sorted(out, key=lambda x: -x["strength"]):
+        by_type[item["trigger"]].append(item)
+    mixed = []
+    while len(mixed) < 15 and any(by_type.values()):
+        for items in by_type.values():
+            if items and len(mixed) < 15:
+                mixed.append(items.pop(0))
+    _suggest_cache.update(at=time.time(), data=mixed)
     return _suggest_cache["data"]
 
 
