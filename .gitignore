@@ -30,3 +30,6 @@ Thumbs.db
 
 # Trained ML models (rebuild with: python -m engine.uplift --train)
 models/
+
+# Local Claude Code launch configs
+.claude/
