@@ -402,8 +402,11 @@ def _out_of_quiet_hours(send_at: datetime, start: str, end: str) -> datetime:
     return datetime.combine(day, q_end, tzinfo=IST).astimezone(send_at.tzinfo)
 
 
-_RUPEES = re.compile(r"(?:₹|\brs\.?|\binr)\s?([\d,]+(?:\.\d+)?)", re.IGNORECASE)
-_PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s?%")
+# Money and percentages in every common way of writing them ("₹500", "Rs. 500", "INR 500", "500 rupees", "500 rs";
+# "15%", "15 percent", "15 per cent"), so an amount can't slip past the "must match the offer" check in words.
+_RUPEES = re.compile(r"(?:₹|\brs\.?|\binr)\s?(\d[\d,]*(?:\.\d+)?)", re.IGNORECASE)
+_RUPEES_AFTER = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s?(?:rupees|rupee|rs\b\.?|inr\b)", re.IGNORECASE)
+_PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s?(?:%|percent\b|per cent\b)", re.IGNORECASE)
 _HOURS = re.compile(r"(\d+)\s?(?:hours|hour|hrs|hr)\b", re.IGNORECASE)
 _LINK = re.compile(r"(https?://|www\.|t\.me/|\.com\b|\.in\b|bit\.ly)", re.IGNORECASE)
 
@@ -466,7 +469,7 @@ def _message_checks(offer: OfferProposal, product, profile: CustomerProfile, rul
     if wrong_pct:
         problems.append(f"message mentions {', '.join(f'{x:g}%' for x in sorted(wrong_pct))} but the offer is "
                         f"{offer.describe()}")
-    rupees = {float(x.replace(",", "")) for x in _RUPEES.findall(text)}
+    rupees = {float(x.replace(",", "")) for x in _RUPEES.findall(text) + _RUPEES_AFTER.findall(text)}
     allowed = {float(offer.min_order_rupees), float(profile.wallet_balance_rupees)}
     if t in ("flat_off", "cashback_to_wallet"):
         allowed.add(float(offer.amount))

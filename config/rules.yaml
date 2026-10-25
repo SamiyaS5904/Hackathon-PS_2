@@ -109,6 +109,12 @@ message:
     - "best price ever"
     - "free gift"
     - "100% original"
+    - "half price"
+    - "half-price"
+    - "buy one get one"
+    - "buy 1 get 1"
+    - "bogo"
+    - "double discount"
 
 # -----------------------------------------------------------------------------------------------------
 # SAFETY BOUNDS FOR EDITS (the Rules page refuses values outside these, so an edit can't lose money)
