@@ -27,9 +27,9 @@ from engine.features import CustomerProfile
 from engine.rules import RuleState
 from engine.rules_store import ActiveRules
 
-# Rough cost of one Opus decision (see reasoning.md section 17). Shown on the Day Plan as an estimate only;
-# real costs are logged per decision from the API's token counts.
-EST_COST_PER_DECISION_USD = 0.085
+# Starting estimate for one AI decision with Sonnet 5.5 + the one-call design (measured ~$0.016-0.028).
+# Once real decisions exist, the Day Plan uses their actual average cost instead (average_ai_cost_usd).
+EST_COST_PER_DECISION_USD = 0.02
 USD_TO_INR = 88
 
 
@@ -68,10 +68,18 @@ def agent_runs_used(conn: sqlite3.Connection, now: datetime) -> int:
                         "AND created_at <= ?", (to_ts(start_of_ist_day(now)), to_ts(now))).fetchone()[0]
 
 
-def estimated_cost(decisions: int) -> dict:
+def average_ai_cost_usd(conn: sqlite3.Connection, last_n: int = 20) -> float:
+    """Average real cost of the last AI decisions (from logged token usage), or the starting estimate."""
+    rows = [r[0] for r in conn.execute("SELECT cost_usd FROM decisions WHERE cost_usd IS NOT NULL AND cost_usd > 0 "
+                                       "ORDER BY id DESC LIMIT ?", (last_n,))]
+    return sum(rows) / len(rows) if rows else EST_COST_PER_DECISION_USD
+
+
+def estimated_cost(decisions: int, per_decision_usd: float = EST_COST_PER_DECISION_USD) -> dict:
     """Estimated API cost for a number of AI decisions, for the Day Plan screen."""
-    usd = decisions * EST_COST_PER_DECISION_USD
-    return {"decisions": decisions, "usd": round(usd, 2), "inr": round(usd * USD_TO_INR)}
+    usd = decisions * per_decision_usd
+    return {"decisions": decisions, "usd": round(usd, 2), "inr": round(usd * USD_TO_INR),
+            "per_decision_inr": round(per_decision_usd * USD_TO_INR, 2)}
 
 
 # ---------------------------------------------------------------------------------------------------
