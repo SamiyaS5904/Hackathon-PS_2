@@ -16,6 +16,7 @@ What the endpoints cover (CLAUDE.md section 9, Session 5):
   /api/testers      link (personal link + /start code), re-link, list
   /api/rules        active rules, version history, edit with safety bounds (pending offers re-checked)
   /api/followups    resolve "wait" decisions that are due
+  /api/guardrails   circuit breaker gauges, budgets, what each rule caught, latest harness results
 The Claude API key is never used here directly: only engine/agent.py uses it, via decide().
 """
 
@@ -42,6 +43,7 @@ from engine.clock import ist_date, now_utc, parse_ts, start_of_ist_day, to_ist, 
 from engine.decide import decide, recheck_scheduled
 from engine.features import SENT_STATUSES, build_profile
 from engine.followups import run_due_followups
+from engine.guardrails import build_report
 from engine.gatekeeper import (USD_TO_INR, agent_runs_used, average_ai_cost_usd, circuit_breaker, estimated_cost,
                                get_day_plan, set_day_plan)
 from engine.models import OfferProposal
@@ -467,6 +469,13 @@ def update_rules(body: RulesIn) -> dict:
 # ---------------------------------------------------------------------------------------------------
 # Follow-ups
 # ---------------------------------------------------------------------------------------------------
+@app.get("/api/guardrails")
+def guardrails() -> dict:
+    """Everything the Guardrails page shows (read-only; see engine/guardrails.py)."""
+    conn = db()
+    return build_report(conn, get_active_rules(conn), now_utc())
+
+
 @app.post("/api/followups/run")
 def followups() -> list[dict]:
     return run_due_followups(db())
