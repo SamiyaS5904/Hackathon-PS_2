@@ -294,6 +294,11 @@ with an offer (treatment rows). Checked against the hidden truth, the model alon
 different mistakes. So production uses the average. For "buys anyway" the model is clearly better (AUC 0.847 vs
 0.731) and better calibrated, so it replaces the formula there.
 
+**Calibration (Session 6):** the first profit simulation showed the AI choosing points for VIPs who needed a real
+discount. The AI was right given our numbers; the numbers were wrong. So the formula's base effects are now set
+from what past campaigns actually measured (treatment vs holdout), not from guesses. Lesson: the AI is only as good
+as the prices on its menu, which is why profit maths is code we can test against data.
+
 ## 20. Why "knows when not to send" (waiting) and verified claims
 **Waiting:** if a customer may buy on their own soon, an offer only gives margin away. The AI can wait 1-48h; a
 follow-up then checks: bought -> nothing was spent; didn't buy -> a new decision (which can't wait again). This is

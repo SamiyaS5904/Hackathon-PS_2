@@ -463,3 +463,34 @@ python -u -m bot.telegram_bot                            # terminal 2 -> Telegra
 
 **Next:** Day 1 MVP demo by the user (link via Testers page, Run AI agent, offer on Telegram). Then Day 2:
 Session 6 harness (profit properties, adversarial, agent scenario eval, profit simulation).
+
+## 2026-10-25: Session 6 (part 1): Harness 1-6, first real-AI checks, calibration
+**Built:**
+- `harness/test_profit_properties.py` (hypothesis): thousands of random proposals across every offer type, category,
+  amount, customer and rule state. Anything approved always has expected profit >= min, margin >= floor, within
+  caps and budgets. Checked that the test isn't empty: ~15% of random proposals get approved, covering all types.
+- `harness/test_adversarial.py`: injection in name and search query, 90% off, sneaky amounts/claims, fake urgency,
+  fake deadline, fake loyalty, links, unknown product, 2am send, stacking, huge amounts, no consent.
+  **It found real holes, now fixed in `engine/rules.py` / `config/rules.yaml`:** "half price", "buy one get one",
+  amounts in words ("500 rupees", "50 percent", "per cent"), rupees after the number ("999 rs"), and a regex that
+  crashed on "₹,". 
+- `harness/test_fallback.py`: every AI failure path (API down, timeout, junk output, 2 rejections, no key, daily
+  limit) goes to the fallback, which is still rule-checked; circuit breaker pauses offers.
+- Real-AI checks (run on request, answers saved in `harness/recordings/`, git-ignored): `harness/agent_runs.py`
+  (temp DB copy, sample per hidden persona, saved answers), `harness/truth.py` (hidden-truth referee),
+  `harness/simulate_profit.py` (harness 6), `harness/eval_agent_scenarios.py` (harness 5, 16 golden scenarios).
+
+**First paid run (~Rs 41):** simulation **FAIL** (AI + rules Rs 771 vs send-to-all Rs 827, 24 customers);
+scenarios **13/16** (pass bar 14). Reading the failures: the AI gave about-to-leave VIPs points/free delivery where
+a real discount would have won them back, and gave a points hoarder Rs 200 off. The AI was following our numbers,
+and our numbers were wrong: the formula rated points ~2x too high and VIP discounts too low.
+
+**Fix: calibrated `engine/profit.py` on past campaign results** (treatment vs holdout in `offers_history`):
+measured lift pct 10% +8.6 pts, flat +5.4-6.8, cashback +5.2, free delivery +3.6, early access +3.3, 2x points
++2.5, 3x +4.0. New bases follow those; 3x points adds ~60% over 2x (not 2x); the deal-seeker factor is gentler.
+Free check against the hidden truth: average error 0.789 -> 0.690; ranking quality blend 0.51, formula 0.47.
+Saved AI answers are now keyed by the priced menu, so changed numbers always ask the AI again.
+**163 tests pass.**
+
+**Next:** re-run the two paid checks with the calibrated numbers (~Rs 40, new questions so no saved answers), then
+Session 7.
