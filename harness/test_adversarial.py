@@ -97,11 +97,13 @@ def test_unknown_product_rejected(catalog, rules):
 
 def test_send_at_2am_is_moved_to_8am(catalog, rules):
     two_am = datetime(2026, 10, 23, 20, 30, tzinfo=timezone.utc)  # 02:00 IST on 24 Oct
-    res = run(offer(offer_type="points_multiplier", amount=2, send_at=two_am,
-                    message="Hi Riya, enjoy 2x points on your next order."), catalog=catalog, rules=rules)
-    assert res.offer.send_at.astimezone().hour != 2
-    from engine.clock import to_ist
-    assert to_ist(res.offer.send_at).hour == 8
+    res = run(offer(offer_type="pct_off", amount=15, category="fashion", min_order_rupees=999, send_at=two_am,
+                    message="Hi Riya, 15% off fashion above ₹999."), catalog=catalog, rules=rules)
+    quiet = next(c for c in res.checks if c.rule == "anti_spam.quiet_hours")
+    assert quiet.result == "repaired" and "08:00" in quiet.detail  # moved to 8am, whatever the profit outcome
+    if res.offer:
+        from engine.clock import to_ist
+        assert to_ist(res.offer.send_at).hour == 8
 
 
 def test_stacking_a_second_offer_rejected(catalog, rules):

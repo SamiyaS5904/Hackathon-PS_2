@@ -23,6 +23,7 @@ from pathlib import Path
 from config.settings import PROJECT_ROOT, settings
 from db.store import connect
 from engine.agent import SYSTEM_PROMPT, AgentContext, build_tools, make_client, run_agent
+from engine.candidates import build_candidates
 from engine.catalog import Catalog
 from engine.clock import parse_ts, to_ts
 from engine.features import build_profile
@@ -65,9 +66,11 @@ def decision_context(conn, catalog: Catalog, rules: ActiveRules, customer_id: in
     return profile, state, trigger, detail
 
 
-def _key(customer_id: int, now: datetime, trigger: str, detail, label: str, catalog: Catalog) -> str:
+def _key(customer_id: int, now: datetime, trigger: str, detail, label: str, catalog: Catalog, menu: list) -> str:
+    """Everything the AI's answer depends on, including the priced menu: if the profit maths changes, the menu's
+    numbers change, the key changes, and the AI is asked again (a saved answer is never reused for a new question)."""
     stuff = json.dumps([customer_id, to_ts(now), trigger, detail, label, settings.claude_model, SYSTEM_PROMPT,
-                        build_tools(catalog)], sort_keys=True, default=str)
+                        build_tools(catalog), menu], sort_keys=True, default=str)
     return hashlib.sha1(stuff.encode()).hexdigest()[:16]
 
 
@@ -78,7 +81,8 @@ def recorded_agent(conn, catalog: Catalog, rules: ActiveRules, customer_id: int,
     Returns a plain dict: status, offer (dict or None), reasoning, cost_usd, error, wait_hours, trigger, cached.
     """
     profile, state, trigger, detail = decision_context(conn, catalog, rules, customer_id, now)
-    key = _key(customer_id, now, trigger, detail, label, catalog)
+    menu = build_candidates(profile, catalog, rules, state, now)
+    key = _key(customer_id, now, trigger, detail, label, catalog, menu)
     path = RECORDINGS / f"{key}.json"
     if use_cache and path.exists():
         return {**json.loads(path.read_text(encoding="utf-8")), "cached": True}
