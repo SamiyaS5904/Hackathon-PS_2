@@ -395,3 +395,28 @@ python -m bot.testers relink --username <you> --customer 2942  # same person, di
 - The bot only delivers; deciding stays in `engine/decide.py`, so every sent message passed the rules checker.
 
 **Next:** live test on the user's Telegram (needs their Telegram username), then Session 5 (dashboard).
+
+---
+
+## 2026-10-25: Session 4 check: live Telegram test (real AI, real delivery)
+**Linking:** the first tap on the t.me link never reached the bot (Telegram had nothing pending; the bot received
+nothing). Sending `/start <code>` from the Telegram app worked at 17:22 IST. Added: every incoming update and every
+handler error is now logged immediately (`bot/telegram_bot.py`), and the bot runs with `python -u` for live logs.
+
+**Same person (@Samiya5904), three customer profiles:**
+| # | Customer | Trigger | AI decision | Delivered | Cost |
+|---|---|---|---|---|---|
+| 5 | #1309 Aman (VIP, 71 days vs usual 9) | habit_break | 3x points, message names his favourite FreshFarm Coffee | ✅ 17:23:25 | $0.025 |
+| 6 | #2942 Samiya (deal seeker) after a simulated "lipstick" search | product_interest | 10% off the exact Glowveda Lipstick Neo she viewed (min Rs 499) | ✅ ~17:24 | $0.017 |
+| 7 | #1201 Diya (regular, due in ~3 days, 18% buys-anyway) | manual | **Wait 48h**, send nothing (all options below Rs 20; likely to reorder alone) | nothing sent (correct) | $0.012 |
+
+**Total ~Rs 4.8 for 3 decisions.** Evidence: [docs/evidence/live_telegram_test_2026-10-25.txt](docs/evidence/live_telegram_test_2026-10-25.txt)
+
+**Observations:** for Samiya the AI chose the lipstick offer (Rs 33) over generic 15% fashion (Rs 61), citing her
+fresh interest: priority 2 in CLAUDE.md, explained in the reasoning, still above the minimum. Diya's decision shows
+"knows when not to send" live: a follow-up will check in 48h whether she bought on her own.
+
+**State after the test:** @samiya5904 is linked to customer #1201 (Diya). Re-link with
+`python -m bot.testers relink --username Samiya5904 --customer <id>`.
+
+**Next:** Session 5: API + dashboard (the demo is clicked, not typed).

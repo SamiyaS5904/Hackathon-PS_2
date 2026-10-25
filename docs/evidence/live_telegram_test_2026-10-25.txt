@@ -1,0 +1,51 @@
+LIVE TELEGRAM TEST, 25 Oct 2026 17:22-17:25 IST (real Sonnet 5.5 decisions, real delivery to @Samiya5904)
+Same Telegram user re-linked to three different customer profiles.
+
+Decision #5 | customer #1309 | trigger habit_break | decided by agent | status sent | sent_at 2026-10-25T11:53:25Z | cost $0.0254
+  MESSAGE: Hi Aman, it's been a while, and your FreshFarm Coffee Classic is ready whenever you are. Enjoy 3x reward points on your next order, valid for the next 48 hours. ☕
+  WHY: Send 3x reward points: the most profitable allowed candidate for a lapsed, non-deal-seeking customer.
+    - Usual gap 9.1 days; last order 71.2 days ago (overdue ratio 7.8)
+    - Deal-seeker score 0.02, so discounts are not needed
+    - Chance to buy in 48h without an offer is 6.2%
+    - Favourite item: FreshFarm Coffee Classic, ordered 12 times
+    - No offers in the last 30 days
+    ALSO: C2 free delivery: profit Rs 76, lower than C1
+    ALSO: C3 2x points: profit Rs 74
+    ALSO: C4 reminder: profit Rs 44
+    ALSO: C7/C8/C9 discounts: blocked, profit below Rs 20
+    ALSO: C6 Rs 200 cashback: profit Rs 25
+  IMPACT: Chance to buy 6.2% -> 17.4%; expected profit Rs 107 (offer cost Rs 64, margin 30.8%).
+  WHY NOW: The habit is clearly broken and he has had no offers for weeks, so waiting is unlikely to help.
+
+Decision #6 | customer #2942 | trigger product_interest | decided by agent | status sent | sent_at 2026-10-25T11:54:10Z | cost $0.0173
+  MESSAGE: Hi Samiya, still thinking about the Glowveda Lipstick Neo? Enjoy 10% off it on orders above ₹499, valid for the next 48 hours. 💄
+  WHY: Send 10% off Glowveda Lipstick Neo (min order ₹499, 48h). It matches her fresh product interest and is the cheapest offer that targets it.
+    - Searched 'lipstick' and viewed Glowveda Lipstick Neo 2 times this week
+    - Habit on track: last order 29 days ago vs usual gap 68.9 (overdue ratio 0.42)
+    - Chance to buy in 48h without an offer is 0.003, so she will not buy on her own
+    - Deal-seeker score 1.0 and 100% of past orders were sale orders
+    - No offers in the last 30 days, so no spam risk
+    ALSO: C1 15% off fashion: profit ₹61, but generic and needs a ₹999 minimum; ignores her lipstick interest
+    ALSO: C2 10% off fashion: profit ₹59, not tied to what she looked at
+    ALSO: C5 early access to fashion: profit ₹44, lower chance to buy (0.095)
+    ALSO: C9 10% off Velvet Co Lipstick Max: profit ₹25, she showed less interest in it
+    ALSO: C7 3x points: profit ₹29, low uplift (0.072)
+  IMPACT: Chance to buy 0.003 -> 0.17; expected profit ₹33; offer cost ₹27; margin after offer 40.5%.
+  WHY NOW: She is actively searching and viewing lipsticks now, and her usual shopping hour is around 4pm.
+
+Decision #7 | customer #1201 | trigger manual | decided by agent | status waiting | sent_at None | cost $0.0120
+  MESSAGE: (nothing sent)
+  WHY: Diya is on track with her habit and no candidate offer clears the Rs 20 minimum profit, so we send nothing now and re-check in 48 hours.
+    - Usual gap 11 days; last order 8.2 days ago (overdue ratio 0.75, status on track)
+    - Chance to buy in 48h without an offer is 17.6%, and her next order is due in about 3 days
+    - Deal-seeker score 0.06 and discount dependence 0.03, so she doesn't need discounts
+    - No open cart, and only 2 views in the last 7 days, so no fresh-intent product to target
+    - No offers in the last 30 days, so she is not fatigued, but nothing is worth sending yet
+    ALSO: C1 free reminder: expected profit Rs 17, below the Rs 20 minimum, so it is blocked
+    ALSO: C2 2x points: expected profit Rs 2 (cost Rs 16), blocked
+    ALSO: C3 3x points: expected profit Rs 6 (cost Rs 33), blocked
+    ALSO: Discount on a favourite grocery item: would give margin away to a customer who is likely to reorder on her own, so not priced
+  IMPACT: No cost now. If she orders by herself around day 11, we save the offer cost. If she hasn't ordered after the re-check, the habit will be broken and an offer will make more sense.
+  WHY NOW: She is only slightly short of her usual gap, so waiting costs little and might make an offer unnecessary.
+
+TOTAL: $0.0548 (~Rs 4.8) for 3 decisions
