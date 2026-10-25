@@ -231,12 +231,12 @@ def limits_summary(rules: ActiveRules) -> list[dict]:
     """The headline limits in force (active rules version), for the 'what is protected' list."""
     p, s = rules.profit, rules.anti_spam
     return [
-        {"label": "Minimum expected profit per offer", "value": f"Rs {p['min_expected_profit_rupees']}"},
-        {"label": "Order margin after the offer", "value": f">= {p['margin_floor_pct']}%"},
+        {"label": "Minimum expected profit per offer", "value": f"₹{p['min_expected_profit_rupees']}"},
+        {"label": "Order margin after the offer", "value": f"≥ {p['margin_floor_pct']}%"},
         {"label": "No discount when chance to buy anyway is above", "value": f"{p['buys_anyway_threshold']:.0%}"},
         {"label": "Offers per customer", "value": f"max {s['max_offers_per_7_days']} per 7 days, "
                                                   f"{s['min_hours_between_offers']}h apart"},
-        {"label": "Quiet hours (IST)", "value": f"{s['quiet_hours_start']} - {s['quiet_hours_end']}"},
+        {"label": "Quiet hours (IST)", "value": f"{s['quiet_hours_start']}–{s['quiet_hours_end']}"},
     ]
 
 

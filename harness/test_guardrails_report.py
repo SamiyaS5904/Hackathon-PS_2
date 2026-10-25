@@ -87,4 +87,4 @@ def test_api_serves_the_report(small_db, tmp_path, monkeypatch):
     monkeypatch.setattr(api.main, "db", lambda: connect(copy))
     data = TestClient(api.main.app).get("/api/guardrails").json()
     assert {"breaker", "budgets", "activity", "limits", "harness"} <= set(data)
-    assert data["breaker"]["paused"] is None and data["limits"][0]["value"].startswith("Rs ")
+    assert data["breaker"]["paused"] is None and data["limits"][0]["value"].startswith("₹")
