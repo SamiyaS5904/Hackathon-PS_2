@@ -35,12 +35,24 @@ def blast_offer(profile) -> OfferProposal:
                          message=f"Hi {profile.first_name}, enjoy 10% off {category} on orders above ₹499.")
 
 
+# Cost guard: a typo like --sample 300 would mean 2,400 AI calls (~Rs 4,000). CLAUDE.md: small samples only.
+MAX_NEW_CALLS = 40
+EST_INR_PER_CALL = 1.7
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample", type=int, default=3, help="customers per hidden persona")
     parser.add_argument("--no-cache", action="store_true", help="ignore saved AI answers (costs money)")
+    parser.add_argument("--max-new-calls", type=int, default=MAX_NEW_CALLS,
+                        help=f"refuse to run if more than this many AI calls might be needed (default {MAX_NEW_CALLS})")
     args = parser.parse_args()
+    worst_case = args.sample * 8  # 8 personas; saved answers make most re-runs free, but plan for the worst
+    if worst_case > args.max_new_calls:
+        sys.exit(f"Stopped: --sample {args.sample} could need up to {worst_case} AI calls "
+                 f"(~Rs {worst_case * EST_INR_PER_CALL:,.0f}). Use a smaller --sample, or pass "
+                 f"--max-new-calls {worst_case} if you really mean it.")
 
     conn = temp_database()
     catalog, rules, traits, now = load_catalog(conn), get_active_rules(conn), load_traits(conn), DEFAULT_NOW
