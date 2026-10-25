@@ -80,7 +80,8 @@ cost spent; didn't buy → a new decision (which can't wait again).
 [5 RULES]      engine/rules.py: approve / repair / reject (reason back to agent, max 2 retries)
 [5b FALLBACK]  engine/fallback.py: if agent fails → simple rule table (also checked by rules.py)
 [6 DELIVERY]   bot/telegram_bot.py: linked tester → Telegram; others → "would send"
-[6b FOLLOW-UP] engine/followups.py: resolves "wait" decisions (bought on their own / new decision)
+[6b FOLLOW-UP] engine/followups.py: resolves "wait" decisions (bought on their own / new decision);
+               run every 5 minutes by the API server (not the bot: a follow-up may call the AI)
 [7 DASHBOARD]  api/main.py (FastAPI) → dashboard/ (React)
 [HARNESS]      harness/: proves all of the above
 ```
@@ -271,8 +272,10 @@ message always matches the offer; no fake urgency):
 
 | 8 | `harness/test_candidates.py`, `test_agentic.py`, `test_uplift.py`, `test_agent.py` | Candidate menu, own-idea pricing, triggers, honest deadlines, verified loyalty, wait + follow-ups, uplift model plumbing, agent loop | No | 100% |
 | 9 | `harness/eval_uplift.py` | Uplift model vs formula vs blend, scored against the hidden truth (reads `customer_traits`) | No | blend beats both |
+| 10 | `harness/test_bot.py`, `test_api.py`, `test_guardrails_report.py` | Tester linking + delivery, every dashboard endpoint, Guardrails page numbers (layers per rule, budgets, breaker) | No | 100% |
+| 11 | `harness/eval_segments.py` | Testers page demo profiles (visible signals only) vs hidden personas | No | ≥ 70% (now 86%) |
 
-Tests 1-4, 7 and 8 run on every change (`pytest harness/`). Tests 5-6 run only when the user asks, on a small
+Tests 1-4, 7, 8 and 10 run on every change (`pytest harness/`). Tests 5-6 run only when the user asks, on a small
 sample (default 30 customers), and save the agent's answers so re-runs are free. The harness always hides the real
 API key and uses the hand-made formulas (not the trained model), so results never change between runs.
 
@@ -369,13 +372,15 @@ The user must be able to open any Python file and understand what it does and wh
 ```bash
 pip install -r requirements.txt
 python -m data.generate --customers 3000 --months 12
-python -m bot.telegram_bot
-uvicorn api.main:app --reload
-cd dashboard && npm install && npm run dev
-python -m events.simulator --speed 60
+python -m engine.uplift --train                 # uplift model, ~90s, no API
+python -u -m bot.telegram_bot
+cd dashboard && npm install && npm run build && cd ..
+python -m uvicorn api.main:app --port 8010      # dashboard + API (8000 is taken on the dev laptop)
+python -m events.simulator loop --speed 60      # optional: live events every 60s
 pytest harness/
 python -m harness.eval_agent_scenarios
-python -m harness.simulate_profit --sample 300
+python -m harness.eval_segments          # free
+python -m harness.simulate_profit        # 3 per persona; refuses > 40 possible AI calls unless asked
 ```
 
 ## 15. Scope

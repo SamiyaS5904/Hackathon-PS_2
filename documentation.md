@@ -577,3 +577,23 @@ last order 103 days ago, 33 orders). Decision #11: free delivery above Rs 299, e
 13:54 UTC. The menu was nearly tied (cashback Rs 135, 3x points Rs 131); the AI took the top option and listed the rest.
 
 **Next:** friends' Telegram usernames -> add them with different profiles -> same-event comparison -> re-link demo.
+
+## 2026-10-25: Gap check against CLAUDE.md (everything except live friend testing)
+Audited the code against every non-negotiable rule. Results:
+- API key used only in `engine/agent.py`; `customer_traits` read only by `data/` and `harness/` (other mentions are
+  comments); limits read only through `get_active_rules()`; money in paise.
+- Real database: all 11 decisions have reasoning; all 10 offers that went out have expected profit >= Rs 20, passed
+  the margin-floor check and have no failed rule. 168 tests pass (incl. thousands of random offers: zero losses).
+
+**Fixed:**
+- **Follow-ups now close on their own:** "wait" decisions were only resolved by the simulator loop or a dashboard
+  click, which the normal demo setup (API + bot) doesn't run. The API server now runs `run_due_followups` every
+  5 minutes (`api/main.py` lifespan task; off with `OFFERPILOT_FOLLOWUP_LOOP=0`). Not in the bot: a follow-up can
+  call the AI and the bot must never use the Claude API.
+- **Cost guard on the profit simulation:** CLAUDE.md listed `simulate_profit --sample 300` = up to 2,400 AI calls
+  (~Rs 4,000). It now refuses more than 40 possible calls unless `--max-new-calls` says so; commands corrected.
+- **CLAUDE.md** (factual updates only, no rule changes): commands that work today (port 8010, uplift training,
+  simulator `loop`), harness rows 10-11 (bot/API/guardrails tests, eval_segments), follow-up runner noted.
+- **README.md** for judges: results, how it decides, run, 5-minute demo, repository map.
+
+**Left:** live testing with friends (needs their Telegram usernames).

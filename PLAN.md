@@ -197,7 +197,7 @@ cd dashboard && npm run dev
 python -m events.simulator --speed 60
 pytest harness/
 python -m harness.eval_agent_scenarios
-python -m harness.simulate_profit --sample 300
+python -m harness.simulate_profit
 
 ## Conventions
 Python 3.11, type hints, small pure functions in engine/. Agent output is validated with pydantic.
