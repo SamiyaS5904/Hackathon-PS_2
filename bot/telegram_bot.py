@@ -19,7 +19,7 @@ import sys
 
 from telegram import Update
 from telegram.error import TelegramError
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, TypeHandler
 
 from bot.delivery import due_deliveries, mark_failed, mark_sent
 from bot.testers import link_chat
@@ -42,6 +42,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         conn.close()
     log.info("start from @%s: %s", user.username if user else "?", "linked" if linked else "not linked")
     await update.message.reply_text(text)
+
+
+async def log_every_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log every incoming message (who and what), so linking problems can be diagnosed from the log."""
+    user = update.effective_user
+    text = update.effective_message.text if update.effective_message else None
+    log.info("update from @%s (chat %s): %r", user.username if user else "?",
+             update.effective_chat.id if update.effective_chat else "?", text)
+
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Any exception in a handler is logged with its cause instead of failing silently."""
+    log.error("error while handling an update: %s", context.error, exc_info=context.error)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -68,8 +81,10 @@ async def deliver(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def build_app() -> Application:
     app = Application.builder().token(settings.telegram_bot_token).build()
+    app.add_handler(TypeHandler(Update, log_every_update), group=-1)  # runs first, for every update
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_error_handler(on_error)
     app.job_queue.run_repeating(deliver, interval=DELIVERY_EVERY_SECONDS, first=3)
     return app
 
@@ -78,6 +93,7 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s", level=logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)  # don't log every polling request (URLs contain the token)
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)  # the 15-second delivery job is too chatty
     if not settings.telegram_bot_token:
         raise SystemExit("TELEGRAM_BOT_TOKEN is missing in .env")
     log.info("OfferPilot bot @%s running: delivering due offers every %ss", settings.telegram_bot_username,
