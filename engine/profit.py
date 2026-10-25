@@ -35,14 +35,19 @@ from engine.features import CustomerProfile
 from engine.models import OfferProposal, ProfitEstimate
 
 # Starting uplift per offer type: extra chance to buy within 48h for an "average" customer.
+# CALIBRATED on the company's own past campaigns (treatment vs random holdout, offers_history, 19,683 offers):
+#   10% off +8.6 pts, flat Rs 100-150 +5.4-6.8, Rs 100 cashback +5.2, free delivery +3.6, early access +3.3,
+#   2x points +2.5, 3x points +4.0. The bases below are those effects divided by the average of the
+#   personal factors applied further down (~0.8), so an average customer gets the measured effect.
+#   (The first version guessed these and over-rated points by ~2x; see documentation.md, Session 6.)
 BASE_UPLIFT: dict[str, float] = {
-    "pct_off": 0.12,             # for a 10% discount
-    "flat_off": 0.10,            # for a flat amount worth ~10% of their usual order
-    "cashback_to_wallet": 0.09,  # same, but paid later -> slightly weaker
-    "free_delivery": 0.06,
-    "points_multiplier": 0.04,   # for 2x points
+    "pct_off": 0.11,             # for a 10% discount
+    "flat_off": 0.075,           # for a flat amount worth ~10% of their usual order
+    "cashback_to_wallet": 0.065, # same, but paid later -> slightly weaker
+    "free_delivery": 0.045,
+    "points_multiplier": 0.03,   # for 2x points (3x adds ~60% more, as measured)
     "early_access": 0.04,
-    "reminder": 0.03,
+    "reminder": 0.02,            # never tested in a campaign: kept below early access on purpose
 }
 MAX_UPLIFT = 0.60
 MAX_P_BUY = 0.95
@@ -148,12 +153,15 @@ def formula_uplift(offer: OfferProposal, profile: CustomerProfile, catalog: Cata
     elif t in ("flat_off", "cashback_to_wallet"):
         uplift *= math.sqrt((offer.amount / usual) / 0.10) if offer.amount else 0
     elif t == "points_multiplier":
-        uplift *= max(offer.amount - 1, 0)
+        # measured: 2x +2.5 pts, 3x +4.0 pts -> each extra 'x' above 2 adds ~60% of the 2x effect
+        uplift *= 0 if offer.amount <= 1 else (offer.amount - 1 if offer.amount < 2 else 1 + 0.6 * (offer.amount - 2))
 
     # 2. Who they are
     deal_seeking = max(profile.deal_seeker_score, profile.discount_dependence)
     if t in ("pct_off", "flat_off", "cashback_to_wallet", "early_access"):
-        uplift *= 0.5 + 1.2 * deal_seeking                     # deal seekers react much more to discounts
+        # deal seekers react more to discounts, but not buying in sales does NOT mean a discount won't work
+        # (e.g. a lapsing regular): a moderate swing, 0.75x to 1.25x
+        uplift *= 0.75 + 0.5 * deal_seeking
     if (profile.overdue_ratio or 0) >= 1.3 and profile.total_orders >= 3:
         uplift *= 1.5                                           # a breaking habit: a nudge now can save it
     favourite_ids = {f["product_id"] for f in profile.favourite_items}
