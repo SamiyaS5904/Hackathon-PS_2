@@ -358,3 +358,40 @@ AI then wraps a profitable offer around that product instead. Tone effects can't
 only by real testers.
 
 **Next:** Session 4 (Telegram bot + simulator firing the new triggers and follow-ups). Needs the bot token.
+
+---
+
+## 2026-10-25: Session 4: Telegram bot + event simulator
+**Built:**
+- `bot/testers.py`: add tester (username + customer profile -> personal link), link a chat on /start (username
+  must match), re-link to another customer (the chat moves), list. CLI: `python -m bot.testers add|relink|list`.
+- `bot/delivery.py`: offers due now ('queued', or 'scheduled' whose time came) for linked customers; the chat is
+  looked up at send time, so after a re-link the old customer's pending offer is not sent; expired offers are never
+  sent ('expired'); unlinked -> 'would_send'.
+- `bot/telegram_bot.py`: python-telegram-bot 22; /start <token>, /help, delivery job every 15s. Uses only
+  `TELEGRAM_BOT_TOKEN`; httpx request logging muted so the token never appears in logs.
+- `events/simulator.py`: `fire cart|search|view|none --customer N` writes the event as real data (sessions,
+  searches, views, cart add/abandon), detects the trigger and decides; `tick` / `loop --speed 60` run follow-ups,
+  every linked tester and random background customers. Cost guard: AI only for linked testers by default.
+- Settings: `TELEGRAM_BOT_USERNAME` (public) for links. Bot verified with Telegram: **@offer_pilot_samiya_bot**.
+- `harness/test_bot.py`: 14 tests. **122 tests pass.**
+
+**How to run (demo):**
+```bash
+python -m bot.telegram_bot                                   # terminal 1: keep running
+python -m bot.testers add --username <your_telegram_username> --customer 1309
+python -m events.simulator fire none --customer 1309          # decide now for this customer
+python -m events.simulator fire cart --customer 1309          # or: create a cart event, then decide
+python -m bot.testers relink --username <you> --customer 2942  # same person, different customer
+```
+
+**Demo customers picked from observable profiles (no prior decisions):**
+#1309 Aman (VIP, habit broken: usual gap 9 days, now 71), #1201 Diya (regular on track, 18% buys-anyway),
+#2942 Samiya (deal seeker 1.0, fashion/beauty).
+
+**Decisions & why:**
+- Expired offers are never delivered (found while preparing the live test: old test decisions were still
+  'scheduled'); delivery marks them 'expired'.
+- The bot only delivers; deciding stays in `engine/decide.py`, so every sent message passed the rules checker.
+
+**Next:** live test on the user's Telegram (needs their Telegram username), then Session 5 (dashboard).

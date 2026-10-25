@@ -48,6 +48,16 @@ Expected: agent+rules makes **more profit than send-to-all**, and its total prof
    cd dashboard && npm run dev
    ```
 
+**Before the dashboard exists (Session 4), the same steps work from the command line:**
+```bash
+python -m bot.telegram_bot                                         # keep running
+python -m bot.testers add --username <your_username> --customer 1309   # prints your personal link
+python -m events.simulator fire none --customer 1309                # decide now (strongest trigger)
+python -m events.simulator fire cart --customer 1309                # or create a cart event first
+python -m bot.testers relink --username <your_username> --customer 2942  # same person, another customer
+python -m events.simulator fire search --customer 2942 --query lipstick
+```
+
 ### Step 1: Test on yourself
 1. Dashboard → **Testers** → enter your Telegram username → pick a customer with persona **about-to-leave VIP**
    → **Create link**.
