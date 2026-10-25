@@ -557,3 +557,23 @@ and 16 scenarios need a paid re-run (~Rs 42). The Proof card shows the Session 6
 - 15 of 24 AI answers changed (menus were re-priced); 9 were reused for free.
 
 **Next:** Session 8: real tester rollout per TESTING.md (self -> 2-3 friends, re-link demo).
+
+## 2026-10-25: Session 8 (part 1): Tester rollout prep, profile picker, self-test
+**Built:**
+- `engine/segments.py` + `GET /api/testers/profiles`: clear examples to "play" per segment (About-to-leave VIP,
+  Points collector, Loyal regular, Deal hunter, Cart abandoner, New customer), recognised only from visible signals
+  (habit/overdue, spend, sale-buying share, cart abandon rate, points balance). Only customers who can get an offer
+  now (consent, nothing decided in 7 days, not already played by a tester). Cached 10 minutes.
+- `harness/eval_segments.py` (free, reads the hidden truth): picks match the hidden persona **86%** (VIP 10/10,
+  points 8/8, new 9/10, loyal 8/10, deal 8/10, cart 7/10). Tuning found two look-alikes: festival-only buyers buy
+  ONLY in sales (deal hunters ~50%), and window shoppers abandon carts but barely order (~3 orders vs ~9).
+- Testers page: **Pick a profile to play** (segment tabs, profile cards); clicking fills both Add tester and Re-link.
+- `TESTING.md` Part B rewritten as the rollout script: self-test, 3 friends with different profiles, the re-link
+  demo, live guardrail checks (gatekeeper skip, quiet hours, circuit breaker via Rules page), fallback, results table.
+- `harness/test_api.py`: profiles endpoint test. **168 tests pass.**
+
+**Self-test (real AI + Telegram, Rs 2.44):** re-linked @Samiya5904 to Priya #681 (About-to-leave VIP: usual gap 9 days,
+last order 103 days ago, 33 orders). Decision #11: free delivery above Rs 299, expected profit Rs 136, sent by the bot
+13:54 UTC. The menu was nearly tied (cashback Rs 135, 3x points Rs 131); the AI took the top option and listed the rest.
+
+**Next:** friends' Telegram usernames -> add them with different profiles -> same-event comparison -> re-link demo.
