@@ -43,10 +43,11 @@ Expected: agent+rules makes **more profit than send-to-all**, and its total prof
 2. Put it in `.env` as `TELEGRAM_BOT_TOKEN=...`. Put your Claude key as `ANTHROPIC_API_KEY=...`.
 3. Start everything:
    ```bash
-   python -m bot.telegram_bot
-   uvicorn api.main:app --reload
-   cd dashboard && npm run dev
+   cd dashboard && npm install && npm run build && cd ..   # once, and after dashboard changes
+   python -m uvicorn api.main:app --port 8000              # dashboard + API at http://localhost:8000
+   python -u -m bot.telegram_bot                            # keep running: delivers offers to Telegram
    ```
+   If port 8000 is busy, use `--port 8010` and open http://localhost:8010.
 
 **Before the dashboard exists (Session 4), the same steps work from the command line:**
 ```bash
@@ -61,7 +62,8 @@ python -m events.simulator fire search --customer 2942 --query lipstick
 ### Step 1: Test on yourself
 1. Dashboard → **Testers** → enter your Telegram username → pick a customer with persona **about-to-leave VIP**
    → **Create link**.
-2. Open the link on your phone → press **Start** → the bot says you're linked.
+2. Scan the QR code / open the link on your phone → press **Start** → the bot says you're linked.
+   If nothing happens, open the bot in Telegram and send the `/start <code>` shown next to the QR code.
 3. Dashboard → **Customers** → open that customer → **Run agent**.
 4. ✅ Check: an offer arrives on your Telegram.
 5. ✅ Check: in **Decisions**, open the card → the drawer shows summary, signals used, alternatives, expected

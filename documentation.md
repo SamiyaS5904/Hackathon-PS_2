@@ -420,3 +420,46 @@ fresh interest: priority 2 in CLAUDE.md, explained in the reasoning, still above
 `python -m bot.testers relink --username Samiya5904 --customer <id>`.
 
 **Next:** Session 5: API + dashboard (the demo is clicked, not typed).
+
+---
+
+## 2026-10-25: Session 5: Dashboard API + company dashboard
+**Built:**
+- `api/main.py` (FastAPI): `/api/health`, `/api/day-plan` (GET/PUT), `/api/overview`, `/api/decisions` (+ `/{id}`
+  with reasoning, menu, rule checks, tool trace, cost), `/api/customers` (search, `suggested` live moments with
+  mixed trigger types, profile, `run`, `events`), `/api/testers` (create link + `/start` code, relink, list),
+  `/api/rules` (fields, margins, versions; PUT saves a new version, refuses unsafe values, re-checks pending
+  offers), `/api/followups/run`. Serves the built dashboard at `/`. No decision logic in the API: it calls the engine.
+- `dashboard/` (React 18 + Vite 5 + Tailwind 3 + Recharts + lucide icons + QR codes), dark premium look using the
+  validated dark steps of the reference palette (3-series chart palette passes every CVD / contrast check on the
+  dark surface):
+  - **Today:** greeting, **Plan your day** (AI decisions today/tomorrow, ceiling, cost estimate from the real
+    average of current-design decisions ~Rs 1.6), KPI tiles, offer budget meter, 7-day stacked chart
+    (AI agent / free rules / gatekeeper skip, legend + tooltip), prediction model card, latest decisions.
+  - **Decisions:** filterable feed; click -> **reasoning drawer**: offer + exact Telegram message preview, expected
+    profit / offer cost / AI cost, why, facts used, rejected options, impact and timing, the code-prepared menu
+    with the **chosen** option highlighted, every rule check (icon + label), what the AI did, tokens.
+  - **Customers:** search + live moments; profile as the AI sees it (habit, buys-anyway, deal seeker, favourites,
+    interest products, wallet, points); **Run AI agent**, **Free rules only**, **simulate** cart / views / search.
+  - **Testers:** add tester -> personal link + **QR code** + copyable `/start` code (fallback when the link click
+    doesn't reach the bot); list with **re-link**.
+  - **Rules:** every editable limit grouped, category caps show "max allowed" (avg margin - floor), change
+    summary, save as new version with note and name, version history.
+- Engine: Day Plan cost estimate now averages only one-call-design decisions (old Opus runs inflated it to Rs 5).
+- `harness/test_api.py`: 7 API tests. **129 tests pass.**
+
+**Checked in the browser (built dashboard served by FastAPI):** every page loads with real data; drawer opens
+(after a fix: it's rendered through a portal so page spacing can't shift it); product names replace "product #139";
+"Free rules only" on a live-moment customer created a decision that showed up immediately. Rules editing was
+verified by tests, not on the real database, to keep the demo's version history clean.
+
+**How to run the demo:**
+```bash
+cd dashboard && npm install && npm run build && cd ..   # once (and after dashboard changes)
+python -m uvicorn api.main:app --port 8000              # terminal 1 -> open http://localhost:8000
+python -u -m bot.telegram_bot                            # terminal 2 -> Telegram delivery
+```
+(For dashboard development with hot reload: `cd dashboard && npm run dev` -> http://localhost:5173, API on :8000.)
+
+**Next:** Day 1 MVP demo by the user (link via Testers page, Run AI agent, offer on Telegram). Then Day 2:
+Session 6 harness (profit properties, adversarial, agent scenario eval, profit simulation).
