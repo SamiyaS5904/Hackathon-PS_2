@@ -15,16 +15,20 @@ What the endpoints cover (CLAUDE.md section 9, Session 5):
   /api/customers    search, suggested customers (with live triggers), one profile, Run agent, fire an event
   /api/testers      link (personal link + /start code), re-link, list, demo profiles to play (by visible signals)
   /api/rules        active rules, version history, edit with safety bounds (pending offers re-checked)
-  /api/followups    resolve "wait" decisions that are due
+  /api/followups    resolve "wait" decisions that are due (also done automatically every 5 minutes, see below)
   /api/guardrails   circuit breaker gauges, budgets, what each rule caught, latest harness results
 The Claude API key is never used here directly: only engine/agent.py uses it, via decide().
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import os
 import sqlite3
 import time
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from collections import defaultdict
 from datetime import timedelta
@@ -54,7 +58,36 @@ from engine.triggers import TRIGGER_TYPES, detect_triggers
 from engine.uplift import get_model
 from events.simulator import fire_cart, fire_search, fire_views, react
 
-app = FastAPI(title="OfferPilot API", version="1.0")
+FOLLOWUP_EVERY_SECONDS = 300
+log = logging.getLogger("uvicorn.error")  # shows up in the uvicorn console
+
+
+async def _followup_loop() -> None:
+    """
+    Every 5 minutes, resolve 'wait' decisions whose time has come (engine/followups.py): bought on their own ->
+    nothing spent; didn't buy -> a new decision. Without this, a "wait" would only be resolved when someone clicks
+    the button or runs the simulator, and the AI's timing plan would never close. It lives here, not in the
+    Telegram bot, because a follow-up can call the AI and the bot must never use the Claude API.
+    """
+    while True:
+        try:
+            report = await asyncio.to_thread(lambda: run_due_followups(connect()))
+            for line in report:
+                log.info("follow-up: %s", line)
+        except Exception:  # noqa: BLE001 - a failed round must not stop the loop; try again next time
+            log.exception("follow-up round failed")
+        await asyncio.sleep(FOLLOWUP_EVERY_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    task = asyncio.create_task(_followup_loop()) if os.getenv("OFFERPILOT_FOLLOWUP_LOOP", "1") == "1" else None
+    yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title="OfferPilot API", version="1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["*"], allow_headers=["*"])
 
