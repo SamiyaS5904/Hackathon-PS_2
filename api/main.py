@@ -13,7 +13,7 @@ What the endpoints cover (CLAUDE.md section 9, Session 5):
   /api/overview     today's numbers, last 7 days, circuit breaker, model info
   /api/decisions    the feed, and one decision with its full reasoning, rule checks, menu and tool trace
   /api/customers    search, suggested customers (with live triggers), one profile, Run agent, fire an event
-  /api/testers      link (personal link + /start code), re-link, list
+  /api/testers      link (personal link + /start code), re-link, list, demo profiles to play (by visible signals)
   /api/rules        active rules, version history, edit with safety bounds (pending offers re-checked)
   /api/followups    resolve "wait" decisions that are due
   /api/guardrails   circuit breaker gauges, budgets, what each rule caught, latest harness results
@@ -43,12 +43,13 @@ from engine.clock import ist_date, now_utc, parse_ts, start_of_ist_day, to_ist, 
 from engine.decide import decide, recheck_scheduled
 from engine.features import SENT_STATUSES, build_profile
 from engine.followups import run_due_followups
-from engine.guardrails import build_report
 from engine.gatekeeper import (USD_TO_INR, agent_runs_used, average_ai_cost_usd, circuit_breaker, estimated_cost,
                                get_day_plan, set_day_plan)
+from engine.guardrails import build_report
 from engine.models import OfferProposal
 from engine.rules import RuleState
 from engine.rules_store import RulesValidationError, get_active_rules, list_versions, save_rules, with_change
+from engine.segments import demo_profiles
 from engine.triggers import TRIGGER_TYPES, detect_triggers
 from engine.uplift import get_model
 from events.simulator import fire_cart, fire_search, fire_views, react
@@ -390,6 +391,19 @@ def create_tester(body: TesterIn) -> dict:
 
 class RelinkIn(BaseModel):
     customer_id: int
+
+
+_profiles_cache: dict = {"at": 0.0, "data": []}
+
+
+@app.get("/api/testers/profiles")
+def tester_profiles(refresh: bool = False) -> list[dict]:
+    """Good customers for a tester to play, grouped by visible signals (engine/segments.py). Cached 10 minutes:
+    building ~400 profiles takes a few seconds."""
+    if refresh or time.time() - _profiles_cache["at"] > 600 or not _profiles_cache["data"]:
+        conn = db()
+        _profiles_cache.update(at=time.time(), data=demo_profiles(conn, load_catalog(conn), now_utc(), sample_step=8))
+    return _profiles_cache["data"]
 
 
 @app.post("/api/testers/{username}/relink")

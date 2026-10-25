@@ -88,3 +88,14 @@ def test_rules_edit_creates_version_and_refuses_unsafe(client):
 
 def test_followups_endpoint(client):
     assert client.post("/api/followups/run").json() == []
+
+
+def test_tester_profiles_are_grouped_and_offer_ready(client):
+    api.main._profiles_cache.update(at=0.0, data=[])
+    segments = client.get("/api/testers/profiles?refresh=true").json()
+    assert [s["key"] for s in segments][:2] == ["about_to_leave_vip", "points_collector"]
+    assert all(s["label"] and s["signals"] and s["expect"] for s in segments)
+    linked = {t["customer_id"] for t in client.get("/api/testers").json()}
+    picks = [c for s in segments for c in s["customers"]]
+    assert len({c["id"] for c in picks}) == len(picks)  # a customer is in one segment only
+    assert not linked & {c["id"] for c in picks}       # never a customer already played by a tester
