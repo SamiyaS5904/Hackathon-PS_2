@@ -2,7 +2,7 @@
 anthropic>=0.40
 
 # Telegram bot
-python-telegram-bot>=21.0
+python-telegram-bot[job-queue]>=21,<23
 
 # API for the dashboard
 fastapi>=0.110
