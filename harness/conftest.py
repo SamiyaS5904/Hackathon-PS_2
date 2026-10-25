@@ -130,3 +130,13 @@ def db(small_db: Path, tmp_path: Path):
     conn = connect(copy)
     yield conn
     conn.close()
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """After a full harness run, save the counts so the dashboard's Guardrails page can show the proof."""
+    stats = terminalreporter.stats
+    passed, failed = len(stats.get("passed", [])), len(stats.get("failed", [])) + len(stats.get("error", []))
+    if passed + failed < 100:  # a single file or test was run: not the full proof, keep the last full result
+        return
+    from engine.guardrails import save_harness_result
+    save_harness_result("pytest", {"passed": passed, "failed": failed, "ok": failed == 0})

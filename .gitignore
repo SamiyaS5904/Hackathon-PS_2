@@ -9,6 +9,7 @@ data/output/
 
 # Saved agent answers for harness replays (can be large)
 harness/recordings/
+harness/results/
 
 # Python
 __pycache__/

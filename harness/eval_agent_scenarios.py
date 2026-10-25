@@ -15,9 +15,11 @@ Run: python -m harness.eval_agent_scenarios
 
 from __future__ import annotations
 
+import random
 import sys
 
 from engine.catalog import load_catalog
+from engine.guardrails import save_harness_result
 from engine.profit import estimate
 from engine.rules_store import get_active_rules
 from events.simulator import fire_cart
@@ -86,6 +88,7 @@ def main() -> None:
         for cid in ids:
             label = "simulate"
             if persona == "cart_abandoner":
+                random.seed(f"eval-cart-{cid}")  # same cart product every run, so the saved AI answer is reused
                 fire_cart(conn, catalog, cid, now, ago_hours=3)  # a fresh cart in the temporary copy
                 label = "eval-cart"
             record = recorded_agent(conn, catalog, rules, cid, now, label=label)
@@ -105,6 +108,9 @@ def main() -> None:
         print(f"  {'PASS' if ok else 'FAIL'}  {persona:<15} #{cid:<5} {trigger:<16} -> {what[:50]:<50}")
         print(f"        expected: {wanted}; reasoning {why}{'; ERROR ' + error if error else ''}")
     print(f"\n  New AI calls: {new_calls} (${new_cost:.3f} ~ Rs {new_cost * 88:.0f}); others reused saved answers.")
+    save_harness_result("eval_agent_scenarios", {
+        "ok": passed >= 14, "passed": passed, "total": len(results), "pass_bar": 14,
+        "failed": [{"persona": r[1], "customer_id": r[2], "decision": r[4], "expected": r[5]} for r in results if not r[0]]})
     print(f"  RESULT: {'PASS' if passed >= 14 else 'FAIL'}")
 
 

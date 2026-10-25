@@ -21,6 +21,7 @@ from collections import defaultdict
 
 from engine.catalog import load_catalog
 from engine.fallback import fallback_decide
+from engine.guardrails import save_harness_result
 from engine.models import OfferProposal
 from engine.rules import check_offer
 from engine.rules_store import get_active_rules
@@ -94,6 +95,9 @@ def main() -> None:
         print(f"    {persona:<15} #{cid:<5} {trigger:<16} {status:<9} {what[:55]:<55} true Rs {value:,.0f}")
     ok = totals["AI + rules"] > totals["send to all"] and totals["AI + rules"] > 0
     print(f"\n  New AI calls this run: {new_calls} (${ai_cost:.3f} ~ Rs {ai_cost * 88:.0f}); the rest came from saved answers.")
+    save_harness_result("simulate_profit", {
+        "ok": ok, "customers": n, "totals_rupees": {p: round(totals[p]) for p in policies},
+        "offers_sent": {p: offers_sent[p] for p in policies}})
     print(f"  RESULT: {'PASS' if ok else 'FAIL'} - AI + rules Rs {totals['AI + rules']:,.0f} vs send to all "
           f"Rs {totals['send to all']:,.0f} (must be higher, and above 0)")
 
