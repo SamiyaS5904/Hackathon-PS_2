@@ -544,3 +544,16 @@ and 16 scenarios need a paid re-run (~Rs 42). The Proof card shows the Session 6
 **Checked in the browser:** page loads with real data, no sideways scroll at 1024px, profit bars and rule chart draw.
 
 **Next:** paid re-run of harness 5-6 (on the user's OK), then Session 8: real tester rollout per TESTING.md.
+
+## 2026-10-25: Session 7: Paid checks re-run with the VIP pricing (~Rs 27)
+**Result: both pass, profit clearly up.** Full output: `docs/evidence/harness_ai_checks_vip_2026-10-25.txt`.
+- **Profit simulation:** AI + rules **Rs 1,039** (was Rs 880) vs send-to-all Rs 827, send-to-all + rules Rs 875,
+  free rules only Rs 341. 20 offers sent vs 24.
+- **About-to-leave VIPs:** Rs 144 -> **Rs 244** (send-to-all Rs 262). The AI now chose 8% off electronics for #756
+  (true Rs 72, was Rs 53), 3x points for #89 (Rs 81), early access for #824 (Rs 90, was free delivery Rs 39).
+- **AI scenarios:** 14/16, the same two borderline cases as before (cart #1455 offered the searched jeans since no
+  discount on the cheap cart item earned Rs 20; hoarder #1319 Rs 200 off, inside the fashion cap). Reasoning complete
+  on all 16. The Guardrails page Proof card now shows these results.
+- 15 of 24 AI answers changed (menus were re-priced); 9 were reused for free.
+
+**Next:** Session 8: real tester rollout per TESTING.md (self -> 2-3 friends, re-link demo).

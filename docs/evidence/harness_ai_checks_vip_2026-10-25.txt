@@ -1,0 +1,82 @@
+
+TRUE expected profit vs sending nothing, 24 customers (3 per hidden persona), moment 22 Oct 2026 06:30 UTC
+
+  persona                    send to all   send to all + rules       free rules only            AI + rules
+  loyal_regular                     Rs 8                  Rs 8                  Rs 0                 Rs 18
+  deal_hunter                     Rs 362                Rs 362                 Rs 38                Rs 326
+  vip_at_risk                     Rs 262                Rs 286                Rs 245                Rs 244
+  window_shopper                   Rs 45                 Rs 24                 Rs 17                 Rs 24
+  new_user                         Rs 24                  Rs 0                  Rs 0                 Rs 54
+  cart_abandoner                   Rs 75                 Rs 63                  Rs 0                 Rs 81
+  points_hoarder                  Rs -60                 Rs 33                  Rs 0                Rs 120
+  festival_only                   Rs 110                 Rs 98                 Rs 40                Rs 171
+  TOTAL                           Rs 827                Rs 875                Rs 341              Rs 1,039
+  offers sent                         24                    13                     6                    20
+
+  AI decisions:
+    loyal_regular   #1899  product_interest approved  3x reward points                                        true Rs 13
+    loyal_regular   #560   product_interest no_offer  nothing                                                 true Rs 0
+    loyal_regular   #274   wallet_idle      approved  3x reward points                                        true Rs 5
+    deal_hunter     #1144  product_interest approved  10% off on fashion (min order Rs 499)                   true Rs 115
+    deal_hunter     #1692  product_interest approved  10% off on fashion (min order Rs 499)                   true Rs 145
+    deal_hunter     #573   product_interest approved  free delivery (min order Rs 299)                        true Rs 67
+    vip_at_risk     #756   habit_break      approved  8% off on electronics (min order Rs 499)                true Rs 72
+    vip_at_risk     #89    habit_break      approved  3x reward points                                        true Rs 81
+    vip_at_risk     #824   habit_break      approved  early access to home                                    true Rs 90
+    window_shopper  #321   product_interest no_offer  nothing                                                 true Rs 0
+    window_shopper  #166   wallet_idle      approved  early access to electronics                             true Rs 24
+    window_shopper  #2118  cart_abandoned   no_offer  nothing                                                 true Rs 0
+    new_user        #113   product_interest approved  5% off on product #106 (min order Rs 689)               true Rs 31
+    new_user        #386   product_interest no_offer  nothing                                                 true Rs 0
+    new_user        #1803  product_interest approved  free delivery (min order Rs 299)                        true Rs 23
+    cart_abandoner  #1164  product_interest approved  early access to beauty                                  true Rs 9
+    cart_abandoner  #1455  product_interest approved  10% off on product #71 (min order Rs 1609)              true Rs 39
+    cart_abandoner  #328   habit_break      approved  15% off on fashion (min order Rs 999)                   true Rs 32
+    points_hoarder  #1319  manual           approved  Rs 200 off on fashion (min order Rs 700)                true Rs 29
+    points_hoarder  #1602  product_interest approved  3x reward points                                        true Rs 65
+    points_hoarder  #726   wallet_idle      approved  early access to fashion                                 true Rs 27
+    festival_only   #2948  product_interest approved  early access to fashion                                 true Rs 77
+    festival_only   #1377  wallet_idle      approved  early access to electronics                             true Rs 52
+    festival_only   #1788  habit_break      approved  10% off on fashion (min order Rs 499)                   true Rs 41
+
+  New AI calls this run: 15 ($0.271 ~ Rs 24); the rest came from saved answers.
+  RESULT: PASS - AI + rules Rs 1,039 vs send to all Rs 827 (must be higher, and above 0)
+=================== EVAL ===================
+
+AI scenario check: 14/16 passed (pass bar 14/16)
+
+  PASS  loyal_regular   #1899  product_interest -> 3x reward points                                  
+        expected: nothing or a zero-cost perk, no discount (buys anyway); reasoning complete
+  PASS  loyal_regular   #560   product_interest -> no_offer                                          
+        expected: nothing or a zero-cost perk, no discount (buys anyway); reasoning complete
+  PASS  deal_hunter     #1144  product_interest -> 10% off on fashion (min order Rs 499)             
+        expected: an offer (reacts strongly to deals); reasoning complete
+  PASS  deal_hunter     #1692  product_interest -> 10% off on fashion (min order Rs 499)             
+        expected: an offer (reacts strongly to deals); reasoning complete
+  PASS  vip_at_risk     #756   habit_break      -> 8% off on electronics (min order Rs 499)          
+        expected: a comeback offer (habit broken, high value); reasoning complete
+  PASS  vip_at_risk     #89    habit_break      -> 3x reward points                                  
+        expected: a comeback offer (habit broken, high value); reasoning complete
+  PASS  window_shopper  #321   product_interest -> no_offer                                          
+        expected: nothing or a small offer (rarely converts); reasoning complete
+  PASS  window_shopper  #166   wallet_idle      -> early access to electronics                       
+        expected: nothing or a small offer (rarely converts); reasoning complete
+  PASS  new_user        #113   product_interest -> 5% off on product #106 (min order Rs 689)         
+        expected: low-risk: no offer costing more than Rs 100; reasoning complete
+  PASS  new_user        #386   product_interest -> no_offer                                          
+        expected: low-risk: no offer costing more than Rs 100; reasoning complete
+  PASS  cart_abandoner  #1164  cart_abandoned   -> Rs 150 off on fashion (min order Rs 500)          
+        expected: an offer tied to the fresh cart, or a deliberate wait; reasoning complete
+  FAIL  cart_abandoner  #1455  cart_abandoned   -> 10% off on product #71 (min order Rs 1609)        
+        expected: an offer tied to the fresh cart, or a deliberate wait; reasoning complete
+  FAIL  points_hoarder  #1319  manual           -> Rs 200 off on fashion (min order Rs 700)          
+        expected: points / free nudge rather than a big discount; reasoning complete
+  PASS  points_hoarder  #1602  product_interest -> 3x reward points                                  
+        expected: points / free nudge rather than a big discount; reasoning complete
+  PASS  festival_only   #2948  product_interest -> early access to fashion                           
+        expected: no big discount outside a sale; reasoning complete
+  PASS  festival_only   #1377  wallet_idle      -> early access to electronics                       
+        expected: no big discount outside a sale; reasoning complete
+
+  New AI calls: 2 ($0.033 ~ Rs 3); others reused saved answers.
+  RESULT: PASS
