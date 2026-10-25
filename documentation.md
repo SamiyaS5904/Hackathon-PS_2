@@ -494,3 +494,20 @@ Saved AI answers are now keyed by the priced menu, so changed numbers always ask
 
 **Next:** re-run the two paid checks with the calibrated numbers (~Rs 40, new questions so no saved answers), then
 Session 7.
+
+## 2026-10-25: Session 6 (part 2): Paid checks re-run with calibrated numbers (~Rs 42)
+**Result: both pass.** Full output: `docs/evidence/harness_ai_checks_2026-10-25.txt`.
+- **Profit simulation (harness 6): PASS.** True profit on 24 customers: AI + rules **Rs 880** vs send-to-all Rs 827,
+  send-to-all + rules Rs 782, free rules only Rs 249. AI + rules sent 20 offers (send-to-all 24) and won on
+  festival buyers (Rs 171 vs 110), points hoarders (Rs 67 vs -60) and new users (Rs 54 vs 24).
+- **AI scenarios (harness 5): 14/16 PASS** (bar 14), reasoning complete on all 16.
+- The 2 remaining fails, read honestly:
+  - cart abandoner #1455: the fresh cart was a cheap snack; every discount on it was under the Rs 20 minimum, so the AI
+    offered 10% off the jeans he had searched for (the most profitable allowed option) and said why. Sensible, but
+    not "tied to the cart", so it counts as a fail.
+  - points hoarder #1319: Rs 200 off a Rs 700 order (~29%, inside the 30% fashion cap) because it was the top-profit
+    candidate. Allowed and profitable, but bigger than we want for a hoarder.
+- Weak spot left: about-to-leave VIPs (AI + rules Rs 144 vs send-to-all Rs 262): the AI still prefers free delivery /
+  points for them. To look at in Session 7 (prompt + how VIP comeback discounts are priced).
+
+**Next:** Session 7 (guardrails page, circuit breaker UI, polish, reasoning prompt tuning incl. VIP comebacks).
