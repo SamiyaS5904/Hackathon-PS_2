@@ -1,0 +1,72 @@
+# =====================================================================================================
+# CSV IMPORT MAPPING (python -m data.import_csv)
+# -----------------------------------------------------------------------------------------------------
+# Tells the importer which column in YOUR export holds each field OfferPilot needs. Left side = OfferPilot's field
+# (don't change), right side = your column name. Optional fields can be deleted if your export doesn't have them.
+# The sample files next to this one (customers.csv, products.csv, orders.csv) use exactly these names.
+# =====================================================================================================
+
+brand: "Glow & Co (sample D2C brand)"
+
+# Your timestamps' timezone, and the formats they may come in (first match wins; ISO 8601 always works too)
+utc_offset: "+05:30"
+date_formats: ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M", "%Y-%m-%d"]
+currency_unit: rupees            # prices like 499.00 (use "paise" if your export stores 49900)
+
+customers:
+  id: customer_id                # required (any text, e.g. C-1001)
+  first_name: first_name         # required
+  last_name: last_name           # optional
+  city: city                     # optional
+  signup_date: created_at        # optional (otherwise: first order date)
+  marketing_consent: accepts_marketing   # optional: yes/true/1 = agreed to offers. Missing -> defaults below
+  language: language             # optional: "Hindi" gets Hinglish messages (config/brand_voice.yaml)
+
+products:
+  id: sku                        # required
+  name: title                    # required
+  category: category             # required (mapped to a rule category below)
+  price: price                   # required, selling price
+  cost: cost                     # required, what the product costs you (no cost = no margin = no profit maths)
+  brand: vendor                  # optional
+  subcategory: product_type      # optional
+
+orders:                          # ONE ROW PER ORDER LINE (order id repeats for multi-item orders)
+  id: order_id                   # required
+  customer_id: customer_id       # required
+  ordered_at: created_at         # required
+  product_id: sku                # required
+  quantity: quantity             # required
+  unit_price: unit_price         # required, price paid per unit before the order discount
+  discount: order_discount       # optional, ORDER-level coupon discount (repeated on each line is fine: used once)
+  delivery_fee: shipping         # optional
+  status: status                 # optional: delivered / cancelled / returned (anything else = delivered)
+
+campaigns:                       # optional file (--campaigns): past offers with a random holdout group
+  customer_id: customer_id
+  offer_type: offer_type         # pct_off / flat_off / free_delivery / cashback_to_wallet / points_multiplier / early_access
+  value: value                   # % for pct_off, rupees for flat_off / cashback, x for points
+  category: category
+  group: group                   # treatment (was sent) / holdout (picked but NOT sent, on purpose)
+  sent_at: sent_at
+  expires_at: expires_at         # required
+  redeemed_at: redeemed_at
+  purchased_in_window: purchased # optional 1/0; otherwise worked out from the orders
+
+# Your categories -> OfferPilot's rule categories (each has its own discount cap on the Rules page)
+category_map:
+  Skincare: beauty
+  Haircare: beauty
+  Bath & Body: beauty
+  Home Fragrance: home
+
+defaults:
+  marketing_consent: false       # if the export has no consent column, nobody gets offers until you say so
+  language: English
+  city: Unknown
+
+# Used only when there are NO past campaigns (learning mode, engine/learning.py)
+learning_mode:
+  holdout_share: 0.10            # 10% of customers who allow marketing never get offers, so you can measure the lift
+  conservative_uplift_factor: 0.7  # expect 30% less from every offer until your own campaigns prove otherwise
+  seed: 7
