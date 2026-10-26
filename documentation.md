@@ -628,3 +628,35 @@ Hindi-language customers; regenerate data with backup; ask before each paid AI r
 **Free baseline (current engine, 24 customers, 12 weeks):** send to all Rs 2,692 (48h Rs 1,473), send to all + rules
 Rs 2,046, free rules Rs 388. Full-price share: no offers 65%, send to all 55% (coupon training visible).
 The paid AI column of the "before" baseline will be run from commit `3dc1cff` (engine unchanged) when approved.
+
+## 2026-10-26: v2 Steps 2-3: habit protection, retention value, win-back budget
+**Built:**
+- `config/rules.yaml` sections `habit`, `retention`, `winback` (Rules page editable, safety bounds in
+  `rules_store.validate_rules`; older saved versions get the defaults through `with_defaults`).
+- `engine/profit.py`: for late customers (overdue ≥ 1.3, ≥ 3 orders) `retention_value = 0.4 × uplift × future margin`
+  (orders in 12 weeks from the usual gap, max 12, × normal margin per order); `total_value = expected_profit +
+  retention_value`; shown in the explanation. `formula_uplift`: past coupon use no longer raises discount uplift.
+- `engine/rules.py`:
+  - `habit_protection`: no pct/flat/cashback for customers with ≥ 70% full-price orders unless late (then only as a
+    win-back offer).
+  - Value rule split: normal offers keep "immediate profit ≥ Rs 20"; **win-back offers** (late customer, and either
+    relying on retention value or a habit-protection exception) need total value ≥ Rs 20, immediate ≥ Rs 0, and the
+    win-back budgets (30% of daily, Rs 30,000/month, Rs 300/customer/month). Margin floor unchanged everywhere.
+- Full-price share window: **12 months, not 90 days** (deviation from the request, measured): in the last 90 days
+  27 of 90 days were sale days (Independence Day, Big Billion Days, Diwali), so even loyal regulars looked
+  deal-driven (median 0.70). Over 12 months: loyal 0.79, VIP 0.81, points 0.78 (protected) vs deal hunters 0.56,
+  festival buyers 0.00. `full_price_share_90d` is still computed and shown; `habit.share_window` switches.
+  A shop-adjusted 90-day version was tried and rejected (it made 78% of deal hunters look full-price).
+- `decisions.offer_kind` / `variant_id` / `variants` columns (auto-migration in `db/store.py`). Candidates and
+  `estimate_profit` show offer kind, retention and total value; the agent prompt explains win-back and habit
+  protection (numbers stay in code).
+- Dashboard: Win-back/Normal badge and value split in the decision drawer, win-back meters on Guardrails, new fields on
+  the Rules page.
+- Tests: property tests now check the v2 invariants (normal: immediate ≥ min; win-back: late, total ≥ min,
+  immediate ≥ floor, win-back budgets; every offer: margin floor, total value ≥ 0, habit exception only as win-back);
+  random cases include 23 win-back approvals and 21 habit blocks per 3,000. New rule tests for habit protection
+  (block, non-cash allowed, threshold edges), win-back (allowed on total value, budgets enforced, on-time customers
+  can't use retention) and the retention formula. **181 tests pass.**
+
+**Checked:** free-rules decision for Farhan #28 (full-price 0.78, 6.6× late): 10% off favourite handbag, win-back,
+immediate Rs 185 + retention Rs 1,109; drawer shows badge and split.
