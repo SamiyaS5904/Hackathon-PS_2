@@ -50,6 +50,10 @@ function BudgetCard({ budgets }) {
       <div className="space-y-4">
         <Meter label="Today" value={budgets.daily.used_rupees} limit={budgets.daily.limit_rupees} format={(v) => inr(v)} />
         <Meter label="This month" value={budgets.monthly.used_rupees} limit={budgets.monthly.limit_rupees} format={(v) => inr(v)} />
+        {budgets.winback_daily && <>
+          <Meter label="Win-back today (part of the above)" value={budgets.winback_daily.used_rupees} limit={budgets.winback_daily.limit_rupees} format={(v) => inr(v)} />
+          <Meter label="Win-back this month" value={budgets.winback_monthly.used_rupees} limit={budgets.winback_monthly.limit_rupees} format={(v) => inr(v)} />
+        </>}
       </div>
       <div className="mt-5 text-xs text-muted">Closest to the per-customer cap ({inr(budgets.per_customer_cap_rupees)} a month)</div>
       {budgets.top_customers.length ? (

@@ -131,6 +131,7 @@ def _decision_row(r: sqlite3.Row) -> dict:
         "offer_cost_rupees": r["offer_cost_paise"] // 100 if r["offer_cost_paise"] is not None else None,
         "ai_cost_inr": round(r["cost_usd"] * USD_TO_INR, 2) if r["cost_usd"] else None,
         "rules_version": r["rules_version"],
+        "offer_kind": r["offer_kind"] if "offer_kind" in r.keys() else "normal",
     }
 
 
@@ -152,6 +153,8 @@ def _decision_detail(conn: sqlite3.Connection, decision_id: int) -> dict:
         "tool_trace": _loads(r["tool_trace"], []),
         "tokens": {"input": r["input_tokens"], "output": r["output_tokens"]},
         "ai_cost_usd": r["cost_usd"],
+        "variant_id": r["variant_id"],
+        "variants": _loads(r["variants"], []),
     }
 
 
@@ -466,6 +469,13 @@ EDITABLE_RULES = [
     ("Anti-spam", "anti_spam.min_hours_between_offers", "Min hours between offers", "h"),
     ("Anti-spam", "anti_spam.quiet_hours_start", "Quiet hours start (IST)", ""),
     ("Anti-spam", "anti_spam.quiet_hours_end", "Quiet hours end (IST)", ""),
+    ("Habit protection", "habit.full_price_threshold", "No coupons from this full-price share (0-1)", ""),
+    ("Retention and win-back", "retention.churn_avoidance_share", "Share of won-back customers who stay (0-1)", ""),
+    ("Retention and win-back", "retention.horizon_weeks", "Retention horizon", "weeks"),
+    ("Retention and win-back", "winback.share_of_daily_budget", "Win-back share of daily budget (0-1)", ""),
+    ("Retention and win-back", "winback.monthly_rupees", "Win-back monthly budget", "₹"),
+    ("Retention and win-back", "winback.per_customer_monthly_rupees", "Win-back per-customer monthly cap", "₹"),
+    ("Retention and win-back", "winback.min_immediate_profit_rupees", "Win-back minimum immediate profit", "₹"),
 ]
 
 

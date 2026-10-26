@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Bot, Send } from "lucide-react";
 import { api } from "../api";
 import { inr, ist, pct, TRIGGER } from "../format";
-import { DeciderBadge, Drawer, ErrorBox, RuleResult, Spinner, StatusBadge } from "./ui";
+import { Badge, DeciderBadge, Drawer, ErrorBox, RuleResult, Spinner, StatusBadge } from "./ui";
 
 function Section({ title, children }) {
   return (
@@ -29,6 +29,8 @@ export default function DecisionDrawer({ decisionId, onClose }) {
   const r = d?.reasoning ?? {};
   const checks = d?.rule_checks ?? [];
   const passed = checks.filter((c) => c.result === "passed").length;
+  const value = r.value;
+  const winback = (value?.offer_kind ?? d?.offer_kind) === "winback";
 
   return (
     <Drawer open={!!decisionId} onClose={onClose} title={`Decision #${decisionId}`}>
@@ -43,6 +45,7 @@ export default function DecisionDrawer({ decisionId, onClose }) {
             </div>
             <StatusBadge status={d.status} />
             <DeciderBadge decider={d.decided_by} />
+            {d.offer && <Badge tone={winback ? "accent" : "neutral"}>{winback ? "Win-back offer" : "Normal offer"}</Badge>}
           </div>
           <div className="text-xs text-muted">
             Trigger: <span className="text-ink2">{TRIGGER[d.trigger_type] ?? d.trigger_type}</span> · decided {ist(d.created_at)}
@@ -87,6 +90,39 @@ export default function DecisionDrawer({ decisionId, onClose }) {
             </div>
           )}
 
+          {/* v2: value split. Win-back offers may rely on retention value, inside their own budget */}
+          {value?.late_customer && (
+            <div className={`rounded-xl border p-3 text-sm ${winback ? "border-accent/40 bg-accent/10" : "border-hairline bg-surface"}`}>
+              <div className="grid grid-cols-3 gap-3 tabular">
+                <div><div className="text-xs text-muted">Immediate profit (48h)</div><div className="mt-0.5 font-semibold">{inr(value.immediate_profit_rupees)}</div></div>
+                <div><div className="text-xs text-muted">Retention value (12 wk)</div><div className="mt-0.5 font-semibold">{inr(value.retention_value_rupees)}</div></div>
+                <div><div className="text-xs text-muted">Total value</div><div className="mt-0.5 font-semibold">{inr(value.total_value_rupees)}</div></div>
+              </div>
+              <p className="mt-2 text-xs text-ink2">
+                {winback
+                  ? "Win-back offer: the customer is late, so their future orders count. Allowed on total value, inside the separate win-back budget; the margin floor still applies."
+                  : "The customer is late, but this offer pays for itself on immediate profit alone (normal offer, normal budget)."}
+              </p>
+            </div>
+          )}
+
+          {d.variants?.length > 0 && (
+            <Section title={`Message variants (${d.variants.length}, all checked by the rules)`}>
+              <div className="space-y-2">
+                {d.variants.map((v) => (
+                  <div key={v.id} className={`rounded-lg border px-3 py-2 text-sm ${v.id === d.variant_id ? "border-accent bg-accent/10" : "border-hairline"}`}>
+                    <div className="mb-1 flex items-center gap-2 text-xs text-muted">
+                      <span className="font-medium text-ink2">{v.id}</span> · {v.tone}{v.language && v.language !== "english" ? ` · ${v.language}` : ""}
+                      {v.id === d.variant_id && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white">SENT</span>}
+                    </div>
+                    <div className="text-ink2">{v.text}</div>
+                  </div>
+                ))}
+              </div>
+              {r.why_this_variant && <p className="mt-2 text-xs text-muted">Why this one: {r.why_this_variant}</p>}
+            </Section>
+          )}
+
           <Section title="Why">
             <p className="text-sm leading-relaxed text-ink">{r.summary}</p>
             {r.decided_by_note && <p className="mt-2 text-xs text-muted">{r.decided_by_note}</p>}
@@ -128,7 +164,7 @@ export default function DecisionDrawer({ decisionId, onClose }) {
               <div className="overflow-hidden rounded-xl border border-hairline">
                 <table className="w-full text-sm">
                   <thead className="bg-surface text-left text-xs text-muted">
-                    <tr><th className="px-3 py-2">Option</th><th className="px-3 py-2">Chance to buy</th><th className="px-3 py-2 text-right">Profit</th><th className="px-3 py-2">Rules</th></tr>
+                    <tr><th className="px-3 py-2">Option</th><th className="px-3 py-2">Chance to buy</th><th className="px-3 py-2 text-right">Profit</th>{value?.late_customer && <th className="px-3 py-2 text-right">Total</th>}<th className="px-3 py-2">Rules</th></tr>
                   </thead>
                   <tbody className="tabular">
                     {d.candidates.map((c) => {
@@ -140,9 +176,11 @@ export default function DecisionDrawer({ decisionId, onClose }) {
                         <td className="px-3 py-2 text-ink2">
                           {c.idea}
                           {chosen && <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white">CHOSEN</span>}
+                          {c.offer_kind === "winback" && <span className="ml-2 rounded-full border border-accent/50 px-2 py-0.5 text-[10px] text-[#86b6ef]">win-back</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 text-ink2">{c.chance_to_buy_48h ? `${pct(c.chance_to_buy_48h[0], 1)} → ${pct(c.chance_to_buy_48h[1], 1)}` : "–"}</td>
                         <td className="px-3 py-2 text-right">{inr(c.expected_profit_rupees)}</td>
+                        {value?.late_customer && <td className="px-3 py-2 text-right">{inr(c.total_value_rupees)}</td>}
                         <td className="whitespace-nowrap px-3 py-2">{c.allowed_by_rules ? <RuleResult result="passed" /> : <span title={(c.blocked_because || []).join("; ")}><RuleResult result="failed" /></span>}</td>
                       </tr>
                       );
