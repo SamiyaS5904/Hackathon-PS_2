@@ -64,6 +64,13 @@ function Profile({ id, onDecision }) {
             <Button variant="secondary" onClick={() => act("rules", () => api.runAgent(id, false))} loading={busy === "rules"}>Free rules only</Button>
           </div>
         </div>
+        <p className="mt-3 text-xs text-muted">
+          There is no separate Send button: after the rules approve an offer,{" "}
+          {data.tester
+            ? <>the bot sends it to <span className="text-ink2">@{data.tester}</span> on Telegram within about 15 seconds (status turns to "Sent on Telegram").</>
+            : <>it is saved as "Would send", because no tester is linked to this customer (link one on the Testers page).</>}
+          {" "}Offers decided during quiet hours (22:00–08:00) are sent at 08:00.
+        </p>
         <div className="mt-4"><ErrorBox error={error} /></div>
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
