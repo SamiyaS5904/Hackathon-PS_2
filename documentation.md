@@ -597,3 +597,34 @@ Audited the code against every non-negotiable rule. Results:
 - **README.md** for judges: results, how it decides, run, 5-minute demo, repository map.
 
 **Left:** live testing with friends (needs their Telegram usernames).
+
+## 2026-10-26: v2 Step 1: discount training, win-back revival, 12-week referee
+Plan: "OfferPilot v2" (long-term value, habit protection, variants, CSV import), approved by the user with the
+default decisions: full price = no coupon AND not a sale day; win-back immediate profit floor Rs 0; Hinglish for
+Hindi-language customers; regenerate data with backup; ask before each paid AI run.
+
+**Built:**
+- `data/habits.py` + `config/habits.yaml` (shared by generator and referee, never by the engine):
+  - *Discount training:* each coupon-discounted order (pct/flat/cashback) raises a hidden `wait_for_deal` by 0.06
+    (cap 0.6). Normal-day order chance × (1 − w), sale-day chance × (1 + w); w halves every 45 days without coupons.
+  - *Win-back revival* (referee assumption, documented): an offer-driven order from a customer whose habit has
+    broken revives the habit with chance 0.35. Without it no offer could ever save a lapsing customer.
+- `data/generate.py`: both mechanisms; final `wait_for_deal` stored in `customer_traits` (hidden). Each customer's
+  days now use their own random stream (`seed-sim-<id>`), so behaviour changes can't reshuffle later customers.
+- Data regenerated (seed 42, end 2026-10-21): 37,011 orders, 0 broken links. Old database kept as
+  `data/offerpilot_v1_backup.db` (all old decisions); testers, rules versions and day plans carried over. **Customer
+  identities changed once** (e.g. #681 is now Tanvi), so testers should re-link via "Pick a profile".
+  Uplift model retrained: AUC control 0.851; ranking vs truth: blend 0.53 (formula 0.45, model 0.46).
+- `engine/features.py`: `full_price_share_90d` (no coupon and not a sale day; last 90 days if ≥ 3 orders, else whole
+  history; None below 3 orders), `discounted_orders_90d`. No decision uses them yet.
+- `harness/truth.py`: `simulate_12_weeks` (seeded 200-path daily Monte Carlo with the generator formulas, the offer
+  window, discount training and revival; same seeds with and without the offer). The 48h referee now also applies
+  the trained habit factor.
+- `harness/simulate_profit.py`: 48h and 12-week true profit, offers sent, full-price share (history vs next 12
+  weeks) per approach; pass bar needs AI + rules > send-to-all on both horizons; `--skip-ai` free mode.
+- `harness/test_truth_12w.py`: 5 tests (no offer = 0, repeatable, coupons lower full-price share vs a perk, revival
+  makes win-back worth more than one order, habit maths). **173 tests pass.**
+
+**Free baseline (current engine, 24 customers, 12 weeks):** send to all Rs 2,692 (48h Rs 1,473), send to all + rules
+Rs 2,046, free rules Rs 388. Full-price share: no offers 65%, send to all 55% (coupon training visible).
+The paid AI column of the "before" baseline will be run from commit `3dc1cff` (engine unchanged) when approved.
