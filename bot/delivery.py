@@ -19,14 +19,15 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 
-from bot.manager import manager_chat, offer_card
+from bot.manager import manager_chat
 from engine.clock import parse_ts, to_ts
 
 
 def due_deliveries(conn: sqlite3.Connection, now: datetime) -> list[dict]:
     """
     Offers to send now: [{decision_id, chat_id, text, customer_id}]. Unlinked ones are marked 'would_send'.
-    Manager mode (bot/manager.py): every offer goes to the manager's chat, with a header saying who it is for.
+    Manager mode (bot/manager.py): every offer goes to the manager's chat. Only the customer's message is sent, exactly
+    as the customer would see it; who it was for and why is on the dashboard (Today -> Offer schedule).
     """
     rows = conn.execute("""
         SELECT d.id, d.customer_id, d.message, d.final_offer, COALESCE(d.send_at, d.created_at) start,
@@ -42,8 +43,8 @@ def due_deliveries(conn: sqlite3.Connection, now: datetime) -> list[dict]:
             # Its validity already ran out (e.g. the bot wasn't running): never send an expired offer
             conn.execute("UPDATE decisions SET status = 'expired' WHERE id = ?", (r["id"],))
             continue
-        if manager:
-            due.append({"decision_id": r["id"], "chat_id": manager[1], "text": offer_card(conn, r["id"]),
+        if manager and r["message"]:
+            due.append({"decision_id": r["id"], "chat_id": manager[1], "text": r["message"],
                         "customer_id": r["customer_id"]})
             continue
         if r["telegram_chat_id"] is None or not r["message"]:

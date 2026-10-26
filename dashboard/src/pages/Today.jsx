@@ -1,7 +1,7 @@
 // Today: the first screen the marketing manager sees.
 // Greeting + "Plan your day" (how many AI decisions to allow, and what that costs), today's numbers,
 // decisions over the last 7 days, and the latest decisions (click one to see why).
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, BrainCircuit, Send } from "lucide-react";
 import { api } from "../api";
@@ -83,7 +83,7 @@ function Schedule({ onOpen }) {
   if (!data) return <Card title="Offer schedule"><Spinner /></Card>;
   const t = data.totals;
   return (
-    <Card title="Offer schedule: who gets what, when"
+    <Card title="Offers today: who gets which message, when, and why"
           subtitle={`${t.offers} offers · ${t.on_telegram} sent or on the way · drafts wait for your Send · expected profit ${inr(t.expected_profit_rupees)} · cost if all used ${inr(t.offer_cost_rupees)}`}>
       {data.items.length === 0 ? <p className="text-sm text-muted">No offers yet. Open a customer and click "Make offer (AI)".</p> : (
         <div className="overflow-x-auto">
@@ -93,7 +93,8 @@ function Schedule({ onOpen }) {
             </thead>
             <tbody className="tabular">
               {data.items.map((d) => (
-                <tr key={d.id} onClick={() => onOpen(d.id)} className="cursor-pointer border-t border-hairline hover:bg-raised/40">
+                <Fragment key={d.id}>
+                <tr onClick={() => onOpen(d.id)} className="cursor-pointer border-t border-hairline hover:bg-raised/40">
                   <td className="whitespace-nowrap py-2 pr-3 text-ink2">{ist(d.goes_at)}</td>
                   <td className="py-2 pr-3 text-ink">{d.first_name} <span className="text-muted">#{d.customer_id}</span></td>
                   <td className="py-2 pr-3 text-ink2">{d.offer}{d.offer_kind === "winback" && <span className="ml-2 rounded-full border border-accent/50 px-2 py-0.5 text-[10px] text-[#86b6ef]">win-back</span>}</td>
@@ -107,6 +108,16 @@ function Schedule({ onOpen }) {
                     </>}
                   </td>
                 </tr>
+                {(d.message || d.summary) && (
+                  <tr onClick={() => onOpen(d.id)} className="cursor-pointer hover:bg-raised/40">
+                    <td />
+                    <td colSpan={6} className="pb-3 pr-3">
+                      {d.message && <div className="max-w-2xl rounded-2xl rounded-tl-sm bg-[#1c3556] px-3 py-2 text-xs leading-relaxed text-ink">{d.message}</div>}
+                      {d.summary && <div className="mt-1.5 max-w-2xl text-xs text-muted"><span className="text-ink2">Why:</span> {d.summary}</div>}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

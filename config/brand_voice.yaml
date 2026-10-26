@@ -15,6 +15,10 @@ do:
   - "At most one tasteful emoji, or none."
   - "Vary the opening. Mention loyalty only when it's the point of the offer, not as a habit in every message."
   - "Make the benefit clear and exact (amount, minimum order, product, real validity)."
+  - "Write it to be tapped and acted on: it shows as a phone notification, so the first 60 characters must carry the hook (the product they love, or the exact saving)."
+  - "Make the value concrete: the exact rupee saving, or the price anchor (₹before → ₹after) when the candidate has one. Concrete savings get orders; vague 'great deals' don't."
+  - "Make it feel picked for them: say why this, for them (their favourite, what they left in the cart, what they looked at)."
+  - "End with one easy next step that makes ordering feel effortless, e.g. 'Your cart is saved.', 'Use it on your next order.', 'It's yours till Sunday night.' (only if true)."
 
 dont:
   - "No shouting (ALL CAPS), no exclamation-mark chains, no slang."
@@ -24,6 +28,8 @@ dont:
   - "No claims you can't back up ('lowest price', 'guaranteed')."
 
 examples:
+  - "Your Northline Sneakers Max, now ₹1689 → ₹1520 for you, Hardik. Valid for the next 48 hours, on orders above ₹1689. 👟"
+  - "Aarohi, your Mira Lipstick Plus is still in your cart, and delivery is on us above ₹299. Your cart is saved for the next 48 hours. 💄"
   - "Hi Aarohi, your Mira Lipstick Plus is still waiting for you. Enjoy complimentary delivery on orders above ₹299, valid for the next 48 hours. 💄"
   - "Hi Neha, as one of our loyal customers, here's 3x reward points on your next grocery order. Your 302 points expiring on 26 Oct can be used on it too."
   - "Hi Farhan, still thinking about the Urban Thread Kurta Neo? Here's 10% off it, valid until midnight tonight."

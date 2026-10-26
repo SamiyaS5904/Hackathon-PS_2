@@ -171,7 +171,7 @@ def _manager_on(db, monkeypatch, username="boss"):
     link_chat(db, t["token"], username, 777001)
 
 
-def test_manager_mode_sends_every_offer_to_the_manager_with_a_header(db, monkeypatch):
+def test_manager_mode_sends_every_offer_to_the_manager_as_the_customer_sees_it(db, monkeypatch):
     _manager_on(db, monkeypatch)
     _, unlinked = _two_customers(db)
     decision = _queue_decision(db, unlinked)
@@ -179,7 +179,7 @@ def test_manager_mode_sends_every_offer_to_the_manager_with_a_header(db, monkeyp
                ('{"offer_type": "points_multiplier", "amount": 2, "expiry_hours": 48}', decision))
     due = due_deliveries(db, NOON_IST)
     assert [d["decision_id"] for d in due] == [decision] and due[0]["chat_id"] == 777001
-    assert f"customer #{unlinked}" in due[0]["text"] and "Hi! 2x points for you." in due[0]["text"]
+    assert due[0]["text"] == "Hi! 2x points for you."   # only the message; the "who and why" is on the dashboard
 
 
 def test_draft_is_not_sent_until_the_manager_clicks_send(db, monkeypatch):

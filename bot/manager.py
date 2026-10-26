@@ -11,7 +11,7 @@ How the manager works with it:
   - "Send to my Telegram": the draft is released (approve) and the bot delivers it within ~15 seconds. In quiet
     hours it waits until they end. "Discard" cancels it (it then stops counting against budgets and anti-spam).
   - Automatic triggers (simulator, follow-ups) still go out on their own, to the same Telegram.
-Every message to the manager starts with a short header (customer, offer, profit, why), then the customer's text.
+Only the customer's message is sent to Telegram; who it was for, the offer, profit and why are on the dashboard.
 """
 
 from __future__ import annotations

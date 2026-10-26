@@ -10,26 +10,26 @@
 # =====================================================================================================
 
 habit_favourite:
-  message: "Hi {first_name}! Time to restock your favourite {product_name}? Get {discount} off it on orders above {min_order}, valid till {expiry}."
-  message_hinglish: "Hi {first_name}! Aapka favourite {product_name} restock karne ka time? Uspe {discount} off, {min_order} se upar ke orders par, {expiry} tak valid."
+  message: "{first_name}, your favourite {product_name} is {discount} off, just for you, on orders above {min_order}. Restock before {expiry}."
+  message_hinglish: "{first_name}, aapka favourite {product_name} ab {discount} off, sirf aapke liye, {min_order} se upar ke orders par. {expiry} tak restock kar lijiye."
   summary: "Habit is breaking: {first_name} usually orders every {usual_gap} days but it has been {days_since} days. Offered {discount} off their favourite {product_name}."
 
 cart_free_delivery:
-  message: "Hi {first_name}, your {product_name} is still in your cart. Get FREE delivery on orders above {min_order}, valid till {expiry}."
-  message_hinglish: "Hi {first_name}, aapka {product_name} abhi bhi cart mein hai. {min_order} se upar ke orders par FREE delivery, {expiry} tak valid."
+  message: "{first_name}, your {product_name} is still in your cart, and delivery is on us: FREE on orders above {min_order} till {expiry}. Your cart is saved."
+  message_hinglish: "{first_name}, aapka {product_name} abhi bhi cart mein hai, aur delivery humari taraf se: {min_order} se upar FREE, {expiry} tak. Cart saved hai."
   summary: "Cart left {cart_hours} hours ago (worth {cart_value}). Offered free delivery to help them finish the order."
 
 comeback_category:
-  message: "We miss you, {first_name}! Here's {discount} off on {category} (min order {min_order}), valid till {expiry}."
-  message_hinglish: "We miss you, {first_name}! {category} par {discount} off (min order {min_order}), {expiry} tak valid."
+  message: "We've missed you, {first_name}! {discount} off {category}, picked for you (min order {min_order}). It's yours till {expiry}."
+  message_hinglish: "We've missed you, {first_name}! {category} par {discount} off, aapke liye (min order {min_order}). {expiry} tak aapka hai."
   summary: "High-value customer inactive for {days_since} days. Offered {discount} off their favourite category ({category})."
 
 points_expiring:
-  message: "Hi {first_name}, {points} reward points will expire on {points_expiry_date}. Use them on your next order!"
+  message: "{first_name}, you have {points} reward points to spend before {points_expiry_date}. That's money off your next order, ready when you are."
   message_hinglish: "Hi {first_name}, aapke {points} reward points {points_expiry_date} ko expire ho rahe hain. Agle order pe use kar lijiye!"
   summary: "{points} reward points expire on {points_expiry_date}. A free reminder (no discount, no cost)."
 
 wallet_reminder:
-  message: "Hi {first_name}, you have {wallet_balance} in your wallet. Use it on your next order!"
+  message: "{first_name}, {wallet_balance} is sitting in your wallet. Treat yourself: it's ready to use on your next order."
   message_hinglish: "Hi {first_name}, aapke wallet mein {wallet_balance} hain. Agle order pe use kar lijiye!"
   summary: "{wallet_balance} sitting unused in the wallet for {wallet_idle} days. A free reminder (no discount, no cost)."
