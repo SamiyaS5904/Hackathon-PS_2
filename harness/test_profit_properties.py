@@ -7,12 +7,19 @@ approve keeps the promises in CLAUDE.md section 13. One counter-example fails th
 the simplest failing case, so a bug is easy to read).
 
 Invariants checked on every approved offer:
-  1. expected profit >= the minimum (recomputed independently from the final offer)
-  2. margin after the offer >= the margin floor
+  1. value (recomputed independently from the final offer, v2 split):
+       normal offer   -> immediate expected profit >= the minimum
+       win-back offer -> the customer is late, immediate + retention value >= the minimum, immediate profit >= the
+                         win-back floor, and the cost fits the separate win-back budgets
+     and for EVERY approved offer the total expected value (immediate + retention) is never negative
+     (changed on purpose in v2: before, every offer needed immediate profit >= minimum; win-back offers may now
+     rely on retention value, inside their own smaller budget)
+  2. margin after the offer >= the margin floor (unchanged, every offer)
   3. the offer's cost fits today's, this month's and this customer's budget
   4. a % discount never exceeds its category cap; points never exceed the max; cashback never exceeds the max
   5. expiry within the allowed hours; send time never inside quiet hours
   6. customers who'd buy anyway never get a discount
+  7. habit protection: a cash discount for a full-price customer is only ever a win-back offer
 The same invariants are checked for the fallback rules and for the candidate menu.
 Run: pytest harness/test_profit_properties.py -v
 """
@@ -29,7 +36,7 @@ from engine.catalog import Catalog, Product
 from engine.clock import to_ist
 from engine.fallback import fallback_decide
 from engine.models import OfferProposal
-from engine.profit import estimate
+from engine.profit import estimate, is_late_customer
 from engine.rules import RuleState, check_offer
 from engine.rules_store import ActiveRules, load_default_rules
 from harness.conftest import make_profile
@@ -52,11 +59,13 @@ CATEGORIES = list(CATALOG.category_avg_margin_pct)
 TYPES = ["pct_off", "flat_off", "free_delivery", "cashback_to_wallet", "points_multiplier", "early_access", "reminder"]
 
 profiles = st.builds(
-    lambda p_no, deal, aov, orders, overdue, fav_cat: make_profile(
+    lambda p_no, deal, aov, orders, overdue, fav_cat, full_price, gap: make_profile(
         p_buy_48h_no_offer=p_no, deal_seeker_score=deal, avg_order_value_rupees=aov, total_orders=orders,
-        overdue_ratio=overdue, favourite_categories=[fav_cat], category_spend_share={fav_cat: 1.0}),
+        overdue_ratio=overdue, favourite_categories=[fav_cat], category_spend_share={fav_cat: 1.0},
+        full_price_share_12m=full_price, usual_gap_days=gap),
     p_no=st.floats(0, 0.99), deal=st.floats(0, 1), aov=st.integers(0, 15000), orders=st.integers(0, 60),
-    overdue=st.floats(0, 8), fav_cat=st.sampled_from(CATEGORIES))
+    overdue=st.floats(0, 8), fav_cat=st.sampled_from(CATEGORIES),
+    full_price=st.one_of(st.none(), st.floats(0, 1)), gap=st.one_of(st.none(), st.floats(1, 120)))
 
 offers = st.builds(
     lambda t, amount, target, min_order, expiry, send_minutes: OfferProposal(
@@ -70,9 +79,12 @@ offers = st.builds(
     min_order=st.integers(0, 6000), expiry=st.integers(0, 300), send_minutes=st.integers(0, 2 * 24 * 60))
 
 states = st.builds(
-    lambda today, month, customer: RuleState(spent_today_paise=today, spent_month_paise=month,
-                                             customer_spent_month_paise=customer),
-    today=st.integers(0, 6000_00), month=st.integers(0, 110_000_00), customer=st.integers(0, 600_00))
+    lambda today, month, customer, wb_today, wb_month, wb_customer: RuleState(
+        spent_today_paise=today, spent_month_paise=month, customer_spent_month_paise=customer,
+        winback_spent_today_paise=wb_today, winback_spent_month_paise=wb_month,
+        customer_winback_spent_month_paise=wb_customer),
+    today=st.integers(0, 6000_00), month=st.integers(0, 110_000_00), customer=st.integers(0, 600_00),
+    wb_today=st.integers(0, 2000_00), wb_month=st.integers(0, 35_000_00), wb_customer=st.integers(0, 400_00))
 
 
 def matching_message(o: OfferProposal) -> str:
@@ -85,11 +97,25 @@ def matching_message(o: OfferProposal) -> str:
     return f"Hi Riya, enjoy {what}{on} on orders above ₹{o.min_order_rupees}."
 
 
-def assert_never_loses_money(offer: OfferProposal, profile, state: RuleState) -> None:
+def assert_never_loses_money(offer: OfferProposal, profile, state: RuleState, kind: str) -> None:
     """Every invariant from the module docstring, checked on one approved offer."""
-    p, b, s, i = RULES.profit, RULES.budget, RULES.anti_spam, RULES.integrity
-    e = estimate(offer, profile, CATALOG)
-    assert e.expected_profit_paise >= p["min_expected_profit_rupees"] * 100, e.explanation
+    p, b, s, i, w = RULES.profit, RULES.budget, RULES.anti_spam, RULES.integrity, RULES.winback
+    e = estimate(offer, profile, CATALOG, RULES.retention)
+    minimum = p["min_expected_profit_rupees"] * 100
+    assert e.total_value_paise >= 0, e.explanation
+    if kind == "normal":
+        assert e.expected_profit_paise >= minimum, e.explanation
+    else:
+        assert is_late_customer(profile, RULES.retention), "win-back offers are only for late customers"
+        assert e.total_value_paise >= minimum, e.explanation
+        assert e.expected_profit_paise >= w["min_immediate_profit_rupees"] * 100, e.explanation
+        assert state.winback_spent_today_paise + e.offer_cost_paise <= b["daily_rupees"] * w["share_of_daily_budget"] * 100
+        assert state.winback_spent_month_paise + e.offer_cost_paise <= w["monthly_rupees"] * 100
+        assert state.customer_winback_spent_month_paise + e.offer_cost_paise <= w["per_customer_monthly_rupees"] * 100
+    share = profile.full_price_share_12m
+    if offer.offer_type in RULES.habit["protected_types"] and share is not None \
+            and share >= RULES.habit["full_price_threshold"]:
+        assert kind == "winback", "a cash discount for a full-price customer must be a win-back offer"
     assert e.margin_after_offer_pct >= p["margin_floor_pct"], e.explanation
     assert state.spent_today_paise + e.offer_cost_paise <= b["daily_rupees"] * 100
     assert state.spent_month_paise + e.offer_cost_paise <= b["monthly_rupees"] * 100
@@ -116,7 +142,7 @@ def assert_never_loses_money(offer: OfferProposal, profile, state: RuleState) ->
 def test_any_approved_offer_never_loses_money(offer, profile, state):
     result = check_offer(offer, profile, CATALOG, RULES, state, NOW, message_renderer=matching_message)
     if result.ok:
-        assert_never_loses_money(result.offer, profile, state)
+        assert_never_loses_money(result.offer, profile, state, result.offer_kind)
 
 
 @settings(max_examples=800, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -133,7 +159,7 @@ def test_fallback_offers_never_lose_money(profile, state, points, wallet, idle, 
     result = fallback_decide(profile, CATALOG, RULES, state, NOW, "property test")
     if result.check is not None:
         assert result.check.ok
-        assert_never_loses_money(result.check.offer, profile, state)
+        assert_never_loses_money(result.check.offer, profile, state, result.check.offer_kind)
 
 
 @settings(max_examples=400, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -146,6 +172,10 @@ def test_candidate_menu_only_allows_safe_offers(profile, state):
                                   category=o["category"], min_order_rupees=o["min_order_rupees"],
                                   expiry_hours=o["expiry_hours"], send_at=NOW)
             # candidates are checked at NOW; the send-time repair is applied when the real proposal is checked
-            e = estimate(offer, profile, CATALOG)
-            assert e.expected_profit_paise >= RULES.profit["min_expected_profit_rupees"] * 100
+            e = estimate(offer, profile, CATALOG, RULES.retention)
+            minimum = RULES.profit["min_expected_profit_rupees"] * 100
+            if c["offer_kind"] == "normal":
+                assert e.expected_profit_paise >= minimum
+            else:
+                assert is_late_customer(profile, RULES.retention) and e.total_value_paise >= minimum
             assert e.margin_after_offer_pct >= RULES.profit["margin_floor_pct"]

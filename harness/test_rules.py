@@ -311,3 +311,91 @@ def test_message_mentioning_wallet_balance_is_allowed(catalog, rules, state, now
     o = offer(offer_type="reminder", message="Hi Riya, you have ₹350 in your wallet. Use it on your next order!")
     res = run(o, make_profile(wallet_balance_rupees=350), catalog, rules, state, now)
     assert result_of(res, "message.matches_offer") == "passed"
+
+
+# --- v2: habit protection (rules 'habit') ---------------------------------------------------------------
+from engine.profit import estimate, expected_order, future_margin_paise  # noqa: E402
+from engine.rules_store import ActiveRules, with_change  # noqa: E402
+
+ON_TIME_FULL_PRICE = dict(full_price_share_12m=0.8, overdue_ratio=1.0, total_orders=10)
+LATE_FULL_PRICE = dict(full_price_share_12m=0.8, overdue_ratio=2.0, total_orders=10)
+
+
+def test_habit_protection_blocks_cash_discount_for_full_price_customer(catalog, rules, state, now):
+    res = run(good_offer(), make_profile(**ON_TIME_FULL_PRICE), catalog, rules, state, now)
+    assert res.status == "rejected" and result_of(res, "habit_protection") == "failed"
+
+
+def test_habit_protection_allows_non_cash_offers(catalog, rules, state, now):
+    res = run(good_offer(offer_type="early_access", amount=0, min_order_rupees=0,
+                         message="Hi Riya! Early access to the new fashion drop."),
+              make_profile(**ON_TIME_FULL_PRICE), catalog, rules, state, now)
+    assert result_of(res, "habit_protection") == "passed"
+
+
+def test_habit_protection_threshold_edge(catalog, rules, state, now):
+    at = run(good_offer(), make_profile(**{**ON_TIME_FULL_PRICE, "full_price_share_12m": 0.7}),
+             catalog, rules, state, now)
+    below = run(good_offer(), make_profile(**{**ON_TIME_FULL_PRICE, "full_price_share_12m": 0.69}),
+                catalog, rules, state, now)
+    unknown = run(good_offer(), make_profile(**{**ON_TIME_FULL_PRICE, "full_price_share_12m": None}),
+                  catalog, rules, state, now)
+    assert result_of(at, "habit_protection") == "failed"
+    assert result_of(below, "habit_protection") == "passed" and below.ok
+    assert result_of(unknown, "habit_protection") == "passed"
+
+
+def test_late_full_price_customer_gets_cash_discount_only_as_win_back(catalog, rules, state, now):
+    res = run(good_offer(), make_profile(**LATE_FULL_PRICE), catalog, rules, state, now)
+    assert res.ok, res.failures
+    assert res.offer_kind == "winback" and result_of(res, "profit.winback_value") == "passed"
+    assert result_of(res, "budget.winback_per_customer") == "passed"
+
+
+def test_win_back_budget_is_enforced(catalog, rules, now):
+    cap = rules.winback["per_customer_monthly_rupees"] * 100
+    full = RuleState(customer_winback_spent_month_paise=cap)
+    res = run(good_offer(), make_profile(**LATE_FULL_PRICE), catalog, rules, full, now)
+    assert res.status == "rejected" and result_of(res, "budget.winback_per_customer") == "failed"
+    daily = RuleState(winback_spent_today_paise=round(rules.budget["daily_rupees"] *
+                                                      rules.winback["share_of_daily_budget"] * 100))
+    res = run(good_offer(), make_profile(**LATE_FULL_PRICE), catalog, rules, daily, now)
+    assert result_of(res, "budget.winback_daily") == "failed"
+
+
+# --- v2: retention value and the profit rule split ------------------------------------------------------
+def _rules_with_minimum(rules, rupees: int) -> ActiveRules:
+    return ActiveRules(2, with_change(rules.data, "profit.min_expected_profit_rupees", rupees), "t", "test", None)
+
+
+def test_retention_lets_a_late_customer_pass_on_total_value(catalog, rules, state, now):
+    """Immediate profit below the minimum, immediate + retention above it -> approved as a win-back offer."""
+    late = make_profile(overdue_ratio=2.0, total_orders=10)
+    est = estimate(good_offer(), late, catalog, rules.retention)
+    assert est.retention_value_paise > 0 and est.is_late_customer
+    minimum = (est.expected_profit_paise + est.total_value_paise) // 200   # between immediate and total
+    res = run(good_offer(), late, catalog, _rules_with_minimum(rules, minimum), state, now)
+    assert res.ok and res.offer_kind == "winback", res.failures
+
+
+def test_on_time_customer_cannot_use_retention_value(catalog, rules, state, now):
+    on_time = make_profile(overdue_ratio=1.0, total_orders=10)
+    est = estimate(good_offer(), on_time, catalog, rules.retention)
+    assert est.retention_value_paise == 0 and not est.is_late_customer
+    res = run(good_offer(), on_time, catalog, _rules_with_minimum(rules, est.expected_profit_paise // 100 + 1),
+              state, now)
+    assert res.status == "rejected" and result_of(res, "profit.expected_profit") == "failed"
+
+
+def test_retention_formula(catalog, rules):
+    late = make_profile(overdue_ratio=2.0, total_orders=10, usual_gap_days=14.0)
+    r = rules.retention
+    future = future_margin_paise(late, catalog, r)
+    expected_orders = min(r["horizon_weeks"] * 7 / 14.0, r["max_future_orders"])            # 84 / 14 = 6 orders
+    value, margin_pct, _ = expected_order(offer(offer_type="reminder"), late, catalog)       # their usual order
+    assert future == round(expected_orders * value * margin_pct / 100)
+    est = estimate(good_offer(), late, catalog, r)
+    uplift = est.p_buy_with_offer - est.p_buy_no_offer
+    # p_with/p_no are rounded to 3 decimals in the estimate, so allow that rounding
+    assert abs(est.retention_value_paise - r["churn_avoidance_share"] * uplift * future) <= 0.0005 * future + 1
+    assert est.total_value_paise == est.expected_profit_paise + est.retention_value_paise
