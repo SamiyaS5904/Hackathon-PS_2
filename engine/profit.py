@@ -20,6 +20,13 @@ How the two chances are estimated (simple, explainable heuristics for the MVP):
     reacted to the same offer type before, and the size of the offer. It shrinks for people who'd buy anyway.
   When the uplift model is trained (python -m engine.uplift --train), it replaces the heuristic for every offer
   type it has data on; the heuristic stays as the fallback (e.g. 'reminder', or before the model is trained).
+
+Retention value (v2, only for LATE customers: overdue and enough past orders, config rules.yaml 'retention'):
+    retention_value = churn_avoidance_share x (P(buy|offer) - P(buy|no offer)) x future_margin
+    future_margin   = expected orders in the horizon (horizon days / usual gap, capped) x normal margin per order
+    total_value     = expected_profit + retention_value
+A lapsing customer who comes back is worth their future orders, not just today's. The rules decide how this may
+be used (only for win-back offers, inside a separate budget, margin floor always applies).
 """
 
 from __future__ import annotations
@@ -159,11 +166,12 @@ def formula_uplift(offer: OfferProposal, profile: CustomerProfile, catalog: Cata
         uplift *= 0 if offer.amount <= 1 else (offer.amount - 1 if offer.amount < 2 else 1 + 0.6 * (offer.amount - 2))
 
     # 2. Who they are
-    deal_seeking = max(profile.deal_seeker_score, profile.discount_dependence)
     if t in ("pct_off", "flat_off", "cashback_to_wallet", "early_access"):
-        # deal seekers react more to discounts, but not buying in sales does NOT mean a discount won't work
-        # (e.g. a lapsing regular): a moderate swing, 0.75x to 1.25x
-        uplift *= 0.75 + 0.5 * deal_seeking
+        # deal seekers (who buy in sales) react more to discounts, but not buying in sales does NOT mean a discount
+        # won't work (e.g. a lapsing regular): a moderate swing, 0.75x to 1.25x.
+        # Past COUPON use (discount_dependence) deliberately does NOT raise this: coupon-trained buying is a habit
+        # cost to protect against (rules 'habit_protection'), not a reason to give more coupons.
+        uplift *= 0.75 + 0.5 * profile.deal_seeker_score
     if (profile.overdue_ratio or 0) >= 1.3 and profile.total_orders >= 3:
         uplift *= 1.5                                           # a breaking habit: a nudge now can save it
         if t in ("pct_off", "flat_off", "cashback_to_wallet") and usual >= HIGH_VALUE_ORDER_RUPEES:
@@ -205,8 +213,28 @@ def formula_uplift(offer: OfferProposal, profile: CustomerProfile, catalog: Cata
 # ---------------------------------------------------------------------------------------------------
 # The final number
 # ---------------------------------------------------------------------------------------------------
-def estimate(offer: OfferProposal, profile: CustomerProfile, catalog: Catalog) -> ProfitEstimate:
-    """Run the full profit formula for one offer and explain it in one paragraph a manager can read."""
+def is_late_customer(profile: CustomerProfile, retention: dict | None) -> bool:
+    """Late = their habit is slipping: overdue vs their usual gap, with enough orders to have a habit at all."""
+    return bool(retention and profile.total_orders >= retention["min_orders"]
+                and (profile.overdue_ratio or 0) >= retention["min_overdue_ratio"])
+
+
+def future_margin_paise(profile: CustomerProfile, catalog: Catalog, retention: dict) -> int:
+    """Margin of the orders a healthy habit would bring in the horizon: expected orders x normal margin per order."""
+    if not profile.usual_gap_days:
+        return 0
+    orders = min(retention["horizon_weeks"] * 7 / max(profile.usual_gap_days, 1), retention["max_future_orders"])
+    value, margin_pct, _ = expected_order(OfferProposal(offer_type="reminder"), profile, catalog)
+    return round(orders * value * margin_pct / 100)
+
+
+def estimate(offer: OfferProposal, profile: CustomerProfile, catalog: Catalog,
+             retention: dict | None = None) -> ProfitEstimate:
+    """
+    Run the full profit formula for one offer and explain it in one paragraph a manager can read.
+    `retention` (rules 'retention' section) adds the retention value for late customers; without it the
+    estimate is the plain 48h profit.
+    """
     value, margin_pct, discount_base = expected_order(offer, profile, catalog)
     normal_margin = round(value * margin_pct / 100)
     cost = offer_cost_paise(offer, value, discount_base)
@@ -222,6 +250,17 @@ def estimate(offer: OfferProposal, profile: CustomerProfile, catalog: Catalog) -
         f"Expected profit = {p_with:.2f} x Rs {margin_after // 100:,} - {p_no:.2f} x Rs {normal_margin // 100:,} "
         f"= Rs {expected // 100:,}."
     )
+    late = is_late_customer(profile, retention)
+    retention_paise = 0
+    if late:
+        future = future_margin_paise(profile, catalog, retention)
+        retention_paise = round(retention["churn_avoidance_share"] * max(p_with - p_no, 0) * future)
+        explanation += (
+            f" Retention (customer is late: {profile.overdue_ratio:g}x their usual gap): "
+            f"{retention['churn_avoidance_share']:.0%} of the {p_with - p_no:.0%} extra chance keeps the habit, worth "
+            f"Rs {future // 100:,} of margin over {retention['horizon_weeks']} weeks = Rs {retention_paise // 100:,}. "
+            f"Total value = Rs {expected // 100:,} + Rs {retention_paise // 100:,} = "
+            f"Rs {(expected + retention_paise) // 100:,}.")
     return ProfitEstimate(
         p_buy_no_offer=round(p_no, 3),
         p_buy_with_offer=round(p_with, 3),
@@ -232,6 +271,9 @@ def estimate(offer: OfferProposal, profile: CustomerProfile, catalog: Catalog) -
         margin_after_offer_pct=round(margin_after / value * 100, 2) if value else 0.0,
         expected_profit_paise=expected,
         explanation=explanation,
+        retention_value_paise=retention_paise,
+        total_value_paise=expected + retention_paise,
+        is_late_customer=late,
     )
 
 

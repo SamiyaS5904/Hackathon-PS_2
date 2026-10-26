@@ -30,7 +30,26 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    _migrate(conn)
     return conn
+
+
+# Columns added after the first release: (table, column, SQL type). Older database files get them on open, so
+# nobody has to rebuild their data (CREATE TABLE in schema.sql already has them for new files).
+_ADDED_COLUMNS = [
+    ("decisions", "offer_kind", "TEXT DEFAULT 'normal'"),
+    ("decisions", "variant_id", "TEXT"),
+    ("decisions", "variants", "TEXT"),
+]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add any missing v2 columns to an existing database (safe to run on every connect)."""
+    for table, column, sql_type in _ADDED_COLUMNS:
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if existing and column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
+            conn.commit()
 
 
 def init_schema(conn: sqlite3.Connection) -> None:

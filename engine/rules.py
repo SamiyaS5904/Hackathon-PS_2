@@ -34,7 +34,8 @@ from engine.catalog import Catalog
 from engine.clock import IST, days_between, parse_ts, start_of_ist_day, to_ist, to_ts
 from engine.features import SENT_STATUSES, CustomerProfile
 from engine.models import CheckResult, OfferProposal, RuleCheck
-from engine.profit import estimate, load_offers_config, max_amount_for_margin_floor, target_category
+from engine.profit import (estimate, is_late_customer, load_offers_config, max_amount_for_margin_floor,
+                           target_category)
 from engine.rules_store import ActiveRules
 
 DISCOUNT_TYPES = ("pct_off", "flat_off", "cashback_to_wallet")
@@ -54,6 +55,10 @@ class RuleState:
     spent_month_paise: int = 0
     customer_spent_month_paise: int = 0
     full_price_products_7d: set[int] = field(default_factory=set)
+    # v2: the separate win-back pot (rules 'winback'); win-back offers also count in the totals above
+    winback_spent_today_paise: int = 0
+    winback_spent_month_paise: int = 0
+    customer_winback_spent_month_paise: int = 0
     # best offer amount a NEW customer got recently, per (offer_type, category) -> fairness rule
     new_customer_best: dict[tuple[str, str], float] = field(default_factory=dict)
 
@@ -73,8 +78,8 @@ def load_rule_state(conn: sqlite3.Connection, customer_id: int, rules: ActiveRul
     # Offers to THIS customer: count, last time, and which are still active (not expired yet)
     sent_times: list[datetime] = []
     for r in conn.execute(f"""
-            SELECT final_offer, COALESCE(send_at, created_at) t, offer_cost_paise, created_at FROM decisions
-            WHERE customer_id = ? AND status IN ({placeholders}) AND created_at <= ? AND id != ?""",
+            SELECT final_offer, COALESCE(send_at, created_at) t, offer_cost_paise, created_at, offer_kind
+            FROM decisions WHERE customer_id = ? AND status IN ({placeholders}) AND created_at <= ? AND id != ?""",
                           (customer_id, *SENT_STATUSES, now_ts, skip)):
         t = parse_ts(r["t"])
         sent_times.append(t)
@@ -83,6 +88,8 @@ def load_rule_state(conn: sqlite3.Connection, customer_id: int, rules: ActiveRul
             state.active_offers += 1
         if r["created_at"] >= _month_start(now):
             state.customer_spent_month_paise += r["offer_cost_paise"] or 0
+            if r["offer_kind"] == "winback":
+                state.customer_winback_spent_month_paise += r["offer_cost_paise"] or 0
     for r in conn.execute("SELECT sent_at, expires_at FROM offers_history WHERE customer_id = ? AND "
                           "group_name = 'treatment' AND sent_at <= ?", (customer_id, now_ts)):
         sent_times.append(parse_ts(r["sent_at"]))
@@ -101,6 +108,12 @@ def load_rule_state(conn: sqlite3.Connection, customer_id: int, rules: ActiveRul
         f"SELECT COALESCE(SUM(offer_cost_paise), 0) FROM decisions WHERE status IN ({placeholders}) "
         f"AND created_at >= ? AND created_at <= ? AND id != ?", (*SENT_STATUSES, _month_start(now), now_ts, skip)
     ).fetchone()[0]
+
+    for attr, since in (("winback_spent_today_paise", today), ("winback_spent_month_paise", _month_start(now))):
+        setattr(state, attr, conn.execute(
+            f"SELECT COALESCE(SUM(offer_cost_paise), 0) FROM decisions WHERE status IN ({placeholders}) "
+            f"AND offer_kind = 'winback' AND created_at >= ? AND created_at <= ? AND id != ?",
+            (*SENT_STATUSES, since, now_ts, skip)).fetchone()[0])
 
     # Fairness inputs
     week_ago = to_ts(now - timedelta(days=rules.fairness["no_offer_after_full_price_days"]))
@@ -174,9 +187,11 @@ def check_offer(
     offer = proposal.model_copy(deep=True)
     p, cat_cfg = rules.profit, load_offers_config()["offer_types"]
 
+    offer_kind = "normal"
+
     def result(status: str, profit=None) -> CheckResult:
         return CheckResult(status=status, offer=offer if status != "rejected" else None, checks=report.checks,
-                           profit=profit, rules_version=rules.version)
+                           profit=profit, rules_version=rules.version, offer_kind=offer_kind)
 
     # 1. INTEGRITY (structural: stop at the first problem, nothing else can be checked without these)
     if offer.offer_type not in cat_cfg:
@@ -304,6 +319,29 @@ def check_offer(
         report.passed("profit.buys_anyway", f"{p_no:.0%} chance to buy without an offer (threshold "
                                             f"{p['buys_anyway_threshold']:.0%}).")
 
+    # 6b. HABIT PROTECTION: customers who mostly pay full price get no cash discounts (they'd learn to wait for
+    #     coupons), unless they are late and it's a win-back offer inside the win-back budget
+    late = is_late_customer(profile, rules.retention)
+    window = rules.habit.get("share_window", "12m")
+    share = profile.full_price_share_90d if window == "90d" else profile.full_price_share_12m
+    threshold = rules.habit["full_price_threshold"]
+    protected = share is not None and share >= threshold and t in rules.habit["protected_types"]
+    needs_winback = False
+    if protected and not late:
+        report.failed("habit_protection",
+                      f"{share:.0%} of their orders ({window}) were at full price (threshold {threshold:.0%}); a {t} "
+                      f"would teach them to wait for coupons. Use early access, points or free delivery instead.")
+    elif protected:
+        needs_winback = True
+        report.passed("habit_protection",
+                      f"Full-price customer ({share:.0%}), but late ({profile.overdue_ratio:g}x their usual gap): "
+                      f"a {t} is allowed only as a win-back offer, inside the win-back budget.")
+    else:
+        report.passed("habit_protection",
+                      f"No habit risk: full-price share {share:.0%} (threshold {threshold:.0%})." if share is not None
+                      else ("Not a cash discount." if t not in rules.habit["protected_types"]
+                            else "Too few orders to judge a buying habit."))
+
     # 7. FAIRNESS
     f = rules.fairness
     if offer.product_id in state.full_price_products_7d:
@@ -324,7 +362,7 @@ def check_offer(
 
     # 8. MARGIN FLOOR (repair by lowering the amount if that fixes it)
     floor = p["margin_floor_pct"]
-    est = estimate(offer, profile, catalog)
+    est = estimate(offer, profile, catalog, rules.retention)
     if est.margin_after_offer_pct < floor:
         best = max_amount_for_margin_floor(offer, profile, catalog, floor)
         if t in AMOUNT_TYPES and best > (1 if t == "points_multiplier" else 0) and best < offer.amount:
@@ -333,7 +371,7 @@ def check_offer(
                             f"Margin after the offer would be {est.margin_after_offer_pct:.1f}% (floor {floor:g}%); "
                             f"amount lowered from {offer.amount:g} to {new_amount:g}.")
             offer.amount = float(new_amount)
-            est = estimate(offer, profile, catalog)
+            est = estimate(offer, profile, catalog, rules.retention)
         if est.margin_after_offer_pct < floor or offer.amount <= 0 and t in AMOUNT_TYPES:
             report.failed("profit.margin_floor", f"Margin after the offer is {est.margin_after_offer_pct:.1f}%, below "
                                                  f"the {floor:g}% floor, and lowering the amount can't fix it.")
@@ -341,15 +379,33 @@ def check_offer(
         report.passed("profit.margin_floor", f"Margin after the offer: {est.margin_after_offer_pct:.1f}% "
                                              f"(floor {floor:g}%).")
 
-    # 9. EXPECTED PROFIT (the heart of 'never lose money')
+    # 9. VALUE (the heart of 'never lose money'), two kinds of offer:
+    #    normal   -> immediate expected profit >= minimum (unchanged)
+    #    win-back -> a LATE customer, when the offer passes only thanks to retention value or is a habit-protection
+    #                exception: immediate + retention value >= minimum, immediate profit >= the win-back floor,
+    #                and it must fit the separate win-back budget (step 10)
     min_profit = p["min_expected_profit_rupees"] * 100
-    if est.expected_profit_paise < min_profit:
-        report.failed("profit.expected_profit",
-                      f"Expected profit Rs {est.expected_profit_paise / 100:,.0f} is below the minimum "
-                      f"Rs {min_profit // 100}. {est.explanation}")
-    else:
-        report.passed("profit.expected_profit", f"Expected profit Rs {est.expected_profit_paise / 100:,.0f} "
+    w = rules.winback
+    immediate, total = est.expected_profit_paise, est.total_value_paise
+    if immediate >= min_profit and not needs_winback:
+        report.passed("profit.expected_profit", f"Expected profit Rs {immediate / 100:,.0f} "
                                                 f"(min Rs {min_profit // 100}). {est.explanation}")
+    elif late and total >= min_profit and immediate >= w["min_immediate_profit_rupees"] * 100:
+        offer_kind = "winback"
+        report.passed("profit.winback_value",
+                      f"Win-back offer: immediate profit Rs {immediate / 100:,.0f} + retention value "
+                      f"Rs {est.retention_value_paise / 100:,.0f} = Rs {total / 100:,.0f} (min Rs {min_profit // 100}; "
+                      f"immediate must be at least Rs {w['min_immediate_profit_rupees']}). Uses the win-back budget. "
+                      f"{est.explanation}")
+    elif late:
+        report.failed("profit.winback_value",
+                      f"Even as a win-back offer it isn't worth it: immediate Rs {immediate / 100:,.0f} + retention "
+                      f"Rs {est.retention_value_paise / 100:,.0f} = Rs {total / 100:,.0f} (need Rs {min_profit // 100}, "
+                      f"immediate at least Rs {w['min_immediate_profit_rupees']}). {est.explanation}")
+    else:
+        report.failed("profit.expected_profit",
+                      f"Expected profit Rs {immediate / 100:,.0f} is below the minimum "
+                      f"Rs {min_profit // 100}. {est.explanation}")
 
     # 10. BUDGET
     b, cost = rules.budget, est.offer_cost_paise
@@ -365,6 +421,21 @@ def check_offer(
         else:
             report.passed(rule, f"Rs {cost / 100:,.0f} fits {label} (used Rs {used / 100:,.0f} of "
                                 f"Rs {limit / 100:,.0f}).")
+    if offer_kind == "winback":  # the separate, smaller pot for offers that rely on retention value
+        for rule, used, limit, label in (
+            ("budget.winback_daily", state.winback_spent_today_paise,
+             round(b["daily_rupees"] * w["share_of_daily_budget"] * 100), "today's win-back budget"),
+            ("budget.winback_monthly", state.winback_spent_month_paise, w["monthly_rupees"] * 100,
+             "this month's win-back budget"),
+            ("budget.winback_per_customer", state.customer_winback_spent_month_paise,
+             w["per_customer_monthly_rupees"] * 100, "this customer's monthly win-back cap"),
+        ):
+            if used + cost > limit:
+                report.failed(rule, f"Win-back offer cost Rs {cost / 100:,.0f} would exceed {label} "
+                                    f"(used Rs {used / 100:,.0f} of Rs {limit / 100:,.0f}).")
+            else:
+                report.passed(rule, f"Rs {cost / 100:,.0f} fits {label} (used Rs {used / 100:,.0f} of "
+                                    f"Rs {limit / 100:,.0f}).")
 
     # 11. MESSAGE SAFETY
     if message_renderer:

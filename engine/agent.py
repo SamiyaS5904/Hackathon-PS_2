@@ -96,14 +96,26 @@ when the habit is clearly broken or interest is fading, act now.
 - points_multiplier: 2x or 3x reward points on the next order (low cost). early_access: early access to a sale or category (free).
 - reminder: a free nudge with no discount (points expiring, unused wallet balance).
 
+## Long-term value: win-back offers and habit protection (the numbers come from code, never compute them yourself)
+- A LATE customer (overdue vs their usual gap, enough past orders) who comes back is worth their future orders too.
+  For them the candidates and estimate_profit also show retention_value_rupees and total_value_rupees
+  (immediate profit + retention value).
+- offer_kind "normal": allowed on immediate profit alone. offer_kind "winback": allowed only because the customer is
+  late (it relies on retention value, or it is a cash discount for a full-price customer). Win-back offers use a
+  separate, smaller budget: use one when winning the customer back is clearly the point, and say so in the reasoning.
+- Habit protection: customers who mostly pay full price get no cash discounts (pct_off, flat_off, cashback) unless
+  it's a win-back offer; coupons would teach them to wait for deals. For them, lead with early access, bonus points
+  or free delivery.
+
 ## How to work
 - The first message already contains the customer's profile, what the rules allow right now, and CANDIDATE OFFERS
   that code has built for this customer and priced (chance to buy without/with the offer, cost, expected profit) and
   checked against every rule except the message. Don't fetch the profile or limits again.
 - Usually decide in your FIRST reply: pick the candidate that best fits this customer, write the message and the
   reasoning, and call propose_offer with that candidate's exact fields. Or call propose_no_offer.
-- The most profitable allowed candidate is usually right. Pick another only for a clear reason from the customer's
-  story (e.g. they ignored that offer type several times), and say so in the reasoning.
+- The allowed candidate with the highest value is usually right (expected profit; for late customers, total value).
+  Pick another only for a clear reason from the customer's story (e.g. they ignored that offer type several times,
+  or a free perk protects a full-price habit at almost the same value), and say so in the reasoning.
 - If no candidate fits, or you have better ideas (another product they showed interest in, another amount or
   category), price ALL your ideas in one estimate_profit call (it takes a list of up to 6 ideas and also checks them
   against the rules), then propose. get_recent_activity and get_offer_history are there if you really need them.
@@ -134,7 +146,8 @@ The manager reads your reasoning to understand and trust the decision. Write in 
 - summary: the decision in 1-2 sentences.
 - signals_used: the 3-6 facts that mattered most, each with its value (e.g. "Usually orders every 12 days; last order 31 days ago").
 - alternatives_considered: up to 5 other candidates (or ideas) and why each lost, with its expected profit.
-- expected_impact: chance to buy before -> after and expected profit, copied from estimate_profit.
+- expected_impact: chance to buy before -> after and expected profit, copied from estimate_profit; for a win-back
+  offer also the retention value and total value, and say it is a win-back offer.
 - why_now: one sentence on why this moment.
 
 ## Data safety
@@ -355,7 +368,7 @@ def tool_estimate_profit(ctx: AgentContext, data: dict) -> dict:
             results.append({"idea": n, "error": f"invalid idea: {exc}"})
             continue
         check = check_offer(offer, ctx.profile, ctx.catalog, ctx.rules, ctx.state, ctx.now, check_message=False)
-        e = check.profit or estimate(offer, ctx.profile, ctx.catalog)
+        e = check.profit or estimate(offer, ctx.profile, ctx.catalog, ctx.rules.retention)
         results.append({
             "idea": n,
             "offer": (check.offer or offer).describe(),
@@ -367,6 +380,9 @@ def tool_estimate_profit(ctx: AgentContext, data: dict) -> dict:
             "offer_cost_rupees": e.offer_cost_paise // 100,
             "margin_after_offer_pct": e.margin_after_offer_pct,
             "expected_profit_rupees": e.expected_profit_paise // 100,
+            **({"offer_kind": check.offer_kind} if check.ok else {}),
+            **({"retention_value_rupees": e.retention_value_paise // 100,
+                "total_value_rupees": e.total_value_paise // 100} if e.is_late_customer else {}),
         })
     return {"priced_ideas": results}
 
@@ -389,6 +405,8 @@ class AgentOutcome:
     cache_write_tokens: int = 0              # input written to the cache (1.25x, pays off on the next call)
     api_calls: int = 0
     candidates: list[dict] = field(default_factory=list)  # offers code prepared and priced for the AI
+    variant_id: str | None = None            # the message variant that was sent
+    variants: list[dict] | None = None       # all variants the agent wrote
     cost_usd: float = 0.0
     error: str | None = None
 

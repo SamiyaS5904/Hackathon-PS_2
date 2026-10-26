@@ -85,7 +85,8 @@ class CustomerProfile:
 
     # money
     discount_dependence: float = 0.0
-    full_price_share_90d: float | None = None   # share of recent orders with no coupon and not on a sale day
+    full_price_share_90d: float | None = None   # share of last-90-day orders with no coupon and not on a sale day
+    full_price_share_12m: float | None = None   # the same over 12 months (sale seasons average out)
     discounted_orders_90d: int = 0              # coupon-discounted orders in the last 90 days
     wallet_balance_rupees: int = 0
     wallet_idle_days: float | None = None
@@ -241,15 +242,22 @@ def _full_price(placed: list, times: list[datetime], now: datetime) -> dict:
     """
     Habit protection signal: how much of their buying happens at FULL price (no coupon, not on a sale day).
     Someone who mostly pays full price is a healthy customer; coupons would only teach them to wait for deals.
-    Uses the last 90 days when there are at least 3 orders in it, otherwise the whole history (slow buyers);
-    None below 3 orders.
+
+    Two windows, None below 3 orders in the window:
+      - 90 days: recent, but seasonal. In Aug-Oct about a third of days are sale days (Independence Day, Big Billion
+        Days, Diwali) and everyone buys more then, so even regulars look deal-driven in festival season.
+      - 12 months: sale seasons average out. On our data it separates cleanly: loyal regulars, VIPs and points
+        collectors ~0.78, deal hunters ~0.50, festival-only buyers 0. The habit rule uses this one by default
+        (rules.yaml habit.share_window).
     """
+    def share(rows: list) -> float | None:
+        if len(rows) < FULL_PRICE_MIN_ORDERS:
+            return None
+        return round(sum(1 for r in rows if not r["discount_paise"] and not r["on_sale"]) / len(rows), 2)
+
     recent = [r for r, t in zip(placed, times) if days_between(t, now) <= 90]
-    window = recent if len(recent) >= FULL_PRICE_MIN_ORDERS else placed
-    share = None
-    if len(window) >= FULL_PRICE_MIN_ORDERS:
-        share = round(sum(1 for r in window if not r["discount_paise"] and not r["on_sale"]) / len(window), 2)
-    return {"full_price_share_90d": share,
+    year = [r for r, t in zip(placed, times) if days_between(t, now) <= 365]
+    return {"full_price_share_90d": share(recent), "full_price_share_12m": share(year),
             "discounted_orders_90d": sum(1 for r in recent if r["discount_paise"] > 0)}
 
 

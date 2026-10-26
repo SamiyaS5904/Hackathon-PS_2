@@ -15,6 +15,10 @@ nothing. It can still call any tool if it wants an idea that isn't in the list.
 
 Every candidate goes through the real rules checker (all rules except the message, which doesn't exist yet), so
 the AI sees exactly which ideas are allowed, what the rules would repair, and what each one is expected to earn.
+
+v2 ordering: normal offers first (best immediate profit first), then win-back offers (best total value first).
+Win-back offers are only possible for late customers; for full-price customers cash discounts only ever appear as
+win-back options (habit protection), so the non-cash ideas lead the list for them.
 """
 
 from __future__ import annotations
@@ -110,12 +114,15 @@ def build_candidates(profile: CustomerProfile, catalog: Catalog, rules: ActiveRu
     for label, offer in _ideas(profile, catalog, rules):
         priced.append((label, check_offer(offer, profile, catalog, rules, state, now, check_message=False)))
 
-    allowed = sorted((x for x in priced if x[1].ok), key=lambda x: -x[1].profit.expected_profit_paise)
+    allowed = sorted((x for x in priced if x[1].ok),
+                     key=lambda x: (x[1].offer_kind == "winback", -x[1].profit.total_value_paise))
     blocked = [x for x in priced if not x[1].ok]
     out = []
     for n, (label, res) in enumerate(allowed[:MAX_PASSING_SHOWN] + blocked[:MAX_BLOCKED_SHOWN], start=1):
         offer = res.offer if res.ok else None
         entry = {"id": f"C{n}", "idea": label, "allowed_by_rules": res.ok}
+        if res.ok:
+            entry["offer_kind"] = res.offer_kind
         if offer:
             product = catalog.get(offer.product_id)
             entry["offer"] = {"offer_type": offer.offer_type, "amount": offer.amount, "product_id": offer.product_id,
@@ -131,5 +138,8 @@ def build_candidates(profile: CustomerProfile, catalog: Catalog, rules: ActiveRu
             entry["chance_to_buy_48h"] = [res.profit.p_buy_no_offer, res.profit.p_buy_with_offer]
             entry["offer_cost_rupees"] = res.profit.offer_cost_paise // 100
             entry["margin_after_pct"] = res.profit.margin_after_offer_pct
+            if res.profit.is_late_customer:
+                entry["retention_value_rupees"] = res.profit.retention_value_paise // 100
+                entry["total_value_rupees"] = res.profit.total_value_paise // 100
         out.append(entry)
     return out

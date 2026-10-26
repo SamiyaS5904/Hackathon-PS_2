@@ -70,6 +70,9 @@ class DecisionOutcome:
     followup_at: datetime | None = None      # for 'waiting': when to look at the customer again
     decision_id: int | None = None
     created_at: str = ""
+    offer_kind: str = "normal"               # 'winback' = relies on retention value / habit exception (own budget)
+    variant_id: str | None = None            # which message variant was sent
+    variants: list[dict] | None = None       # all message variants the agent wrote (each passed the message rules)
 
 
 def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manual",
@@ -133,6 +136,16 @@ def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manu
     return outcome
 
 
+def value_summary(check: CheckResult) -> dict:
+    """The value split the manager sees: normal vs win-back, immediate profit, retention value, total."""
+    p = check.profit
+    return {"offer_kind": check.offer_kind,
+            "immediate_profit_rupees": p.expected_profit_paise // 100,
+            "retention_value_rupees": p.retention_value_paise // 100,
+            "total_value_rupees": p.total_value_paise // 100,
+            "late_customer": p.is_late_customer} if p else {"offer_kind": check.offer_kind}
+
+
 def _agent_outcome(agent: AgentOutcome, profile: CustomerProfile, rules, now: datetime,
                    trigger_type: str) -> DecisionOutcome:
     """An approved AI decision. Any automatic repairs by the rules are added to the reasoning, so the manager sees
@@ -142,11 +155,13 @@ def _agent_outcome(agent: AgentOutcome, profile: CustomerProfile, rules, now: da
     repairs = [c.detail for c in check.checks if c.result == "repaired"]
     if repairs:
         reasoning["rule_repairs"] = repairs
+    reasoning["value"] = value_summary(check)
     return DecisionOutcome(
         profile.customer_id, profile.first_name, trigger_type, "agent", _delivery_status(check, profile, now),
         check.offer, reasoning=reasoning, rule_checks=[c.model_dump() for c in check.checks],
         expected_profit_paise=check.profit.expected_profit_paise if check.profit else None,
-        offer_cost_paise=check.profit.offer_cost_paise if check.profit else None, rules_version=rules.version)
+        offer_cost_paise=check.profit.offer_cost_paise if check.profit else None, rules_version=rules.version,
+        offer_kind=check.offer_kind, variant_id=agent.variant_id, variants=agent.variants)
 
 
 def _fallback_outcome(profile: CustomerProfile, catalog: Catalog, rules, state, now: datetime,
@@ -154,6 +169,8 @@ def _fallback_outcome(profile: CustomerProfile, catalog: Catalog, rules, state, 
     result = fallback_decide(profile, catalog, rules, state, now, why_fallback)
     reasoning = {**result.reasoning, "fallback_rules_tried": result.tried}
     check = result.check
+    if check and check.ok:
+        reasoning["value"] = value_summary(check)
     return DecisionOutcome(
         profile.customer_id, profile.first_name, trigger_type, "fallback",
         _delivery_status(check, profile, now),
@@ -164,6 +181,7 @@ def _fallback_outcome(profile: CustomerProfile, catalog: Catalog, rules, state, 
         offer_cost_paise=check.profit.offer_cost_paise if check and check.profit else None,
         rules_version=rules.version,
         proposal=result.candidate.offer.model_dump(mode="json") if result.candidate else None,
+        offer_kind=check.offer_kind if check and check.ok else "normal",
     )
 
 
@@ -181,15 +199,16 @@ def _save(conn: sqlite3.Connection, o: DecisionOutcome, trigger_detail: dict | N
     cur = conn.execute("""
         INSERT INTO decisions (customer_id, created_at, trigger_type, trigger_detail, decided_by, status, proposal,
             final_offer, message, send_at, reasoning, rule_checks, expected_profit_paise, offer_cost_paise,
-            rules_version, tool_trace, input_tokens, output_tokens, cost_usd)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+            rules_version, tool_trace, input_tokens, output_tokens, cost_usd, offer_kind, variant_id, variants)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
         o.customer_id, o.created_at, o.trigger_type, json.dumps(trigger_detail) if trigger_detail else None,
         o.decided_by, o.status, json.dumps(o.proposal) if o.proposal else None,
         offer.model_dump_json() if offer else None, offer.message if offer else None,
         to_ts(offer.send_at) if offer and offer.send_at else (to_ts(o.followup_at) if o.followup_at else None),
         json.dumps(o.reasoning), json.dumps(o.rule_checks), o.expected_profit_paise, o.offer_cost_paise,
         o.rules_version, json.dumps(o.tool_trace) if o.tool_trace else None,
-        o.input_tokens, o.output_tokens, o.cost_usd))
+        o.input_tokens, o.output_tokens, o.cost_usd, o.offer_kind, o.variant_id,
+        json.dumps(o.variants, ensure_ascii=False) if o.variants else None))
     conn.commit()
     return cur.lastrowid
 
@@ -212,9 +231,10 @@ def recheck_scheduled(conn: sqlite3.Connection, now: datetime | None = None) -> 
         reasoning = json.loads(row["reasoning"])
         if check.ok:
             conn.execute("UPDATE decisions SET final_offer = ?, rule_checks = ?, rules_version = ?, "
-                         "offer_cost_paise = ?, expected_profit_paise = ? WHERE id = ?",
+                         "offer_cost_paise = ?, expected_profit_paise = ?, offer_kind = ? WHERE id = ?",
                          (check.offer.model_dump_json(), json.dumps([c.model_dump() for c in check.checks]),
-                          rules.version, check.profit.offer_cost_paise, check.profit.expected_profit_paise, row["id"]))
+                          rules.version, check.profit.offer_cost_paise, check.profit.expected_profit_paise,
+                          check.offer_kind, row["id"]))
             report.append({"decision_id": row["id"], "result": "still valid", "rules_version": rules.version})
         else:
             reasoning["cancelled_note"] = (f"Cancelled before sending: rules version {rules.version} no longer allows "

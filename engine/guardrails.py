@@ -65,10 +65,18 @@ RULE_LABELS = {
     "message.no_fake_urgency": "No fake urgency",
     "message.no_unbacked_claims": "No unbacked claims",
     "message.length": "Length, no links",
+    "habit_protection": "Habit protection (no coupons for full-price buyers)",
+    "profit.winback_value": "Win-back value (incl. retention)",
+    "budget.winback_daily": "Win-back daily budget",
+    "budget.winback_monthly": "Win-back monthly budget",
+    "budget.winback_per_customer": "Win-back per-customer cap",
 }
 
 # Menu entries store only the reason text (to keep the AI's menu short), so the rule is recognised by its wording.
 _MENU_REASON_TO_RULE = [
+    (re.compile(r"full price.*coupons|wait for coupons", re.I), "habit_protection"),
+    (re.compile(r"win-back budget|win-back cap", re.I), "budget.winback_daily"),
+    (re.compile(r"as a win-back offer", re.I), "profit.winback_value"),
     (re.compile(r"expected profit", re.I), "profit.expected_profit"),
     (re.compile(r"margin", re.I), "profit.margin_floor"),
     (re.compile(r"buy(s)? anyway|without an offer.*above", re.I), "profit.buys_anyway"),
@@ -119,9 +127,10 @@ def budget_status(conn: sqlite3.Connection, rules: ActiveRules, now: datetime, t
     placeholders = ",".join("?" * len(SENT_STATUSES))
     today = to_ts(start_of_ist_day(now))
     month = to_ts(to_ist(now).replace(day=1, hour=0, minute=0, second=0, microsecond=0))
-    spent = lambda since: conn.execute(  # noqa: E731
-        f"SELECT COALESCE(SUM(offer_cost_paise), 0) FROM decisions WHERE status IN ({placeholders}) AND created_at >= ?",
-        (*SENT_STATUSES, since)).fetchone()[0]
+    spent = lambda since, extra="": conn.execute(  # noqa: E731
+        f"SELECT COALESCE(SUM(offer_cost_paise), 0) FROM decisions WHERE status IN ({placeholders}) "
+        f"AND created_at >= ?{extra}", (*SENT_STATUSES, since)).fetchone()[0]
+    winback = " AND offer_kind = 'winback'"
     per_customer = conn.execute(
         f"""SELECT d.customer_id, c.first_name, SUM(d.offer_cost_paise) AS used FROM decisions d
             JOIN customers c ON c.id = d.customer_id
@@ -132,6 +141,9 @@ def budget_status(conn: sqlite3.Connection, rules: ActiveRules, now: datetime, t
         "daily": {"used_rupees": spent(today) // 100, "limit_rupees": b["daily_rupees"]},
         "monthly": {"used_rupees": spent(month) // 100, "limit_rupees": b["monthly_rupees"]},
         "per_customer_cap_rupees": b["per_customer_monthly_rupees"],
+        "winback_daily": {"used_rupees": spent(today, winback) // 100,
+                          "limit_rupees": round(b["daily_rupees"] * rules.winback["share_of_daily_budget"])},
+        "winback_monthly": {"used_rupees": spent(month, winback) // 100, "limit_rupees": rules.winback["monthly_rupees"]},
         "top_customers": [{"customer_id": r[0], "first_name": r[1], "used_rupees": r[2] // 100} for r in per_customer],
     }
 
@@ -237,6 +249,10 @@ def limits_summary(rules: ActiveRules) -> list[dict]:
         {"label": "Offers per customer", "value": f"max {s['max_offers_per_7_days']} per 7 days, "
                                                   f"{s['min_hours_between_offers']}h apart"},
         {"label": "Quiet hours (IST)", "value": f"{s['quiet_hours_start']}–{s['quiet_hours_end']}"},
+        {"label": "No coupons for full-price buyers from", "value": f"{rules.habit['full_price_threshold']:.0%} "
+                                                                    f"full-price ({rules.habit.get('share_window', '12m')})"},
+        {"label": "Win-back budget", "value": f"{rules.winback['share_of_daily_budget']:.0%} of daily, "
+                                              f"₹{rules.winback['per_customer_monthly_rupees']}/customer/month"},
     ]
 
 

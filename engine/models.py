@@ -74,6 +74,10 @@ class ProfitEstimate(BaseModel):
     margin_after_offer_pct: float
     expected_profit_paise: int
     explanation: str
+    # v2: what a won-back customer is worth over the coming weeks (only for late customers; engine/profit.py)
+    retention_value_paise: int = 0
+    total_value_paise: int = 0          # expected_profit + retention_value
+    is_late_customer: bool = False      # the retention term applies (overdue and enough past orders)
 
 
 class CheckResult(BaseModel):
@@ -84,6 +88,7 @@ class CheckResult(BaseModel):
     checks: list[RuleCheck]
     profit: ProfitEstimate | None = None
     rules_version: int
+    offer_kind: Literal["normal", "winback"] = "normal"   # win-back = relies on retention / habit exception
 
     @property
     def ok(self) -> bool:
