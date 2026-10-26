@@ -117,6 +117,44 @@ message:
     - "double discount"
 
 # -----------------------------------------------------------------------------------------------------
+# 4.8 HABIT PROTECTION (don't teach full-price customers to wait for coupons)
+# -----------------------------------------------------------------------------------------------------
+habit:
+  # Share of orders bought with no coupon and not on a sale day. At or above this, cash discounts are blocked
+  # (reject) unless it's a win-back offer inside the win-back budget.
+  full_price_threshold: 0.7
+  # Which window: "12m" (default: sale seasons average out) or "90d" (more recent, but in festival season even
+  # regulars look deal-driven because a third of the days are sale days)
+  share_window: 12m
+  protected_types: [pct_off, flat_off, cashback_to_wallet]   # early access, points, free delivery stay allowed
+
+# -----------------------------------------------------------------------------------------------------
+# 4.9 RETENTION VALUE (what a won-back customer is worth over the coming weeks; engine/profit.py)
+# -----------------------------------------------------------------------------------------------------
+retention:
+  # Only for LATE customers: overdue_ratio >= min_overdue_ratio and at least min_orders orders.
+  # retention_value = churn_avoidance_share x (P(buy|offer) - P(buy|no offer)) x future_margin
+  # future_margin   = expected orders in horizon_weeks (from their usual gap, at most max_future_orders)
+  #                   x their normal margin per order
+  churn_avoidance_share: 0.4   # of the customers an offer brings back, the share whose habit really comes back
+  horizon_weeks: 12
+  min_overdue_ratio: 1.3
+  min_orders: 3
+  max_future_orders: 12
+
+# -----------------------------------------------------------------------------------------------------
+# 4.10 WIN-BACK BUDGET (a separate, smaller pot for offers that rely on retention value)
+# -----------------------------------------------------------------------------------------------------
+winback:
+  # A win-back offer = a late customer AND either (a) immediate profit is below the minimum but immediate +
+  # retention value reaches it, or (b) a cash discount for a full-price customer (habit protection exception).
+  # Win-back offers ALSO count against the normal budgets; the margin floor applies as always.
+  share_of_daily_budget: 0.3        # at most 30% of the daily budget may go to win-back offers -> reject
+  monthly_rupees: 30000             # -> reject
+  per_customer_monthly_rupees: 300  # -> reject
+  min_immediate_profit_rupees: 0    # the immediate order must still not lose money
+
+# -----------------------------------------------------------------------------------------------------
 # SAFETY BOUNDS FOR EDITS (the Rules page refuses values outside these, so an edit can't lose money)
 # -----------------------------------------------------------------------------------------------------
 edit_bounds:
@@ -127,3 +165,8 @@ edit_bounds:
   per_customer_monthly_rupees: {min: 0}
   max_offers_per_7_days: {min: 0, max: 7}
   min_hours_between_offers: {min: 0, max: 168}
+  full_price_threshold: {min: 0.3, max: 1}
+  churn_avoidance_share: {min: 0, max: 0.8}
+  horizon_weeks: {min: 1, max: 26}
+  share_of_daily_budget: {min: 0, max: 0.6}
+  min_immediate_profit_rupees: {min: 0}

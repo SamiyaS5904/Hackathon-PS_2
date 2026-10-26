@@ -72,6 +72,34 @@ class ActiveRules:
     def message(self) -> dict:
         return self.data["message"]
 
+    @property
+    def habit(self) -> dict:
+        return self.data["habit"]
+
+    @property
+    def retention(self) -> dict:
+        return self.data["retention"]
+
+    @property
+    def winback(self) -> dict:
+        return self.data["winback"]
+
+
+def with_defaults(data: dict) -> dict:
+    """
+    Fill in rule sections/keys that didn't exist when an older version was saved (e.g. 'habit', 'retention',
+    'winback' were added in v2). The saved version is not changed; new rules start at their default values
+    until marketing edits them.
+    """
+    merged = json.loads(json.dumps(data))
+    for section, values in load_default_rules().items():
+        if section not in merged:
+            merged[section] = values
+        elif isinstance(values, dict) and isinstance(merged[section], dict):
+            for key, value in values.items():
+                merged[section].setdefault(key, value)
+    return merged
+
 
 def load_default_rules() -> dict:
     """The starting rule values from config/rules.yaml."""
@@ -94,7 +122,8 @@ def get_active_rules(conn: sqlite3.Connection) -> ActiveRules:
     """The ONE way to read limits. Always returns the newest saved version."""
     ensure_rules(conn)
     row = conn.execute("SELECT * FROM rules_versions WHERE is_active = 1 ORDER BY version DESC LIMIT 1").fetchone()
-    return ActiveRules(row["version"], json.loads(row["rules_json"]), row["created_at"], row["created_by"], row["note"])
+    return ActiveRules(row["version"], with_defaults(json.loads(row["rules_json"])), row["created_at"],
+                       row["created_by"], row["note"])
 
 
 def list_versions(conn: sqlite3.Connection) -> list[dict]:
@@ -133,7 +162,8 @@ def validate_rules(rules: dict, catalog: Catalog) -> list[str]:
     defaults = load_default_rules()
 
     # Same structure as the defaults: no sections removed or invented
-    for section in ("profit", "budget", "anti_spam", "integrity", "fairness", "message"):
+    for section in ("profit", "budget", "anti_spam", "integrity", "fairness", "message", "habit", "retention",
+                    "winback"):
         if not isinstance(rules.get(section), dict):
             problems.append(f"Section '{section}' is missing.")
     if problems:
@@ -187,6 +217,24 @@ def validate_rules(rules: dict, catalog: Catalog) -> list[str]:
             and integrity["min_expiry_hours"] > integrity["max_expiry_hours"]):
         problems.append("Min expiry hours can't be bigger than max expiry hours.")
     number(rules["message"].get("max_chars"), "Max message length", 50, 1000)
+
+    # v2: habit protection, retention value, win-back budget
+    habit, retention, winback = rules["habit"], rules["retention"], rules["winback"]
+    number(habit.get("full_price_threshold"), "Habit protection: full-price threshold", 0.3, 1)
+    if habit.get("share_window", "12m") not in ("12m", "90d"):
+        problems.append("Habit protection window must be 12m or 90d.")
+    number(retention.get("churn_avoidance_share"), "Retention: churn-avoidance share", 0, 0.8)
+    number(retention.get("horizon_weeks"), "Retention: horizon (weeks)", 1, 26)
+    number(retention.get("min_overdue_ratio"), "Retention: minimum overdue ratio", 1, 10)
+    number(retention.get("min_orders"), "Retention: minimum orders", 1, 100)
+    number(retention.get("max_future_orders"), "Retention: max future orders", 1, 52)
+    number(winback.get("share_of_daily_budget"), "Win-back: share of daily budget", 0, 0.6)
+    number(winback.get("monthly_rupees"), "Win-back: monthly budget (Rs)", 0)
+    number(winback.get("per_customer_monthly_rupees"), "Win-back: per-customer monthly cap (Rs)", 0)
+    number(winback.get("min_immediate_profit_rupees"), "Win-back: minimum immediate profit (Rs)", 0)
+    if isinstance(winback.get("monthly_rupees"), (int, float)) and isinstance(budget.get("monthly_rupees"), (int, float)) \
+            and winback["monthly_rupees"] > budget["monthly_rupees"]:
+        problems.append("Win-back monthly budget can't be bigger than the whole monthly budget.")
 
     # Never allow the safety switches to be turned off from the Rules page
     if not spam.get("respect_marketing_consent", True):
