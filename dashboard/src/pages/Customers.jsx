@@ -2,7 +2,7 @@
 // see their profile as the AI sees it, and act: run the AI agent, use the free rules, or simulate a live event.
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Bot, Eye, RefreshCw, Search, ShoppingCart, Sparkles, Zap } from "lucide-react";
+import { Bot, Eye, RefreshCw, Search, Send, ShoppingCart, Sparkles, Zap } from "lucide-react";
 import { api } from "../api";
 import { inr, ist, pct, TRIGGER } from "../format";
 import DecisionDrawer from "../components/DecisionDrawer";
@@ -17,15 +17,51 @@ function Fact({ label, value }) {
   );
 }
 
+// What just happened, in one line the manager can read during a demo: offer, profit, where it goes, status.
+function SendResult({ d, onOpen }) {
+  const sent = d.status === "sent";
+  const onItsWay = d.status === "queued" || d.status === "scheduled";
+  const tone = sent ? "border-good/40 bg-good/10" : onItsWay ? "border-accent/40 bg-accent/10" : "border-hairline bg-raised/40";
+  return (
+    <div className={`mt-4 rounded-xl border p-4 text-sm ${tone}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium text-ink">{d.offer ?? "No offer"}</div>
+        <StatusBadge status={d.status} />
+      </div>
+      <div className="mt-1.5 text-xs text-ink2">
+        {sent && <>Delivered to Telegram at {ist(d.sent_at)}.</>}
+        {d.status === "queued" && <>On its way: the bot sends it within about 15 seconds…</>}
+        {d.status === "scheduled" && <>Scheduled for {ist(d.send_at)} IST (quiet hours end).</>}
+        {d.status === "would_send" && <>Not sent: no Telegram is linked to this customer. Use "Send to …" to send it to yours.</>}
+        {["nothing", "waiting", "blocked"].includes(d.status) && <>{d.summary}</>}
+        {d.expected_profit_rupees != null && <> Expected profit {inr(d.expected_profit_rupees)}, offer cost {inr(d.offer_cost_rupees)}.</>}
+      </div>
+      {d.message && <div className="mt-2 rounded-lg bg-[#1c3556] px-3 py-2 text-xs text-ink">{d.message}</div>}
+      <button onClick={onOpen} className="mt-2 text-xs text-[#86b6ef] hover:underline">See why (full reasoning)</button>
+    </div>
+  );
+}
+
 function Profile({ id, onDecision }) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(null);
   const [query, setQuery] = useState("lipstick");
   const [error, setError] = useState(null);
   const [lastEvent, setLastEvent] = useState(null);
+  const [testers, setTesters] = useState([]);
+  const [result, setResult] = useState(null);   // the decision just made, refreshed until it is sent
 
   const load = () => api.customer(id).then(setData).catch(setError);
-  useEffect(() => { setData(null); setError(null); setLastEvent(null); load(); }, [id]);
+  useEffect(() => { setData(null); setError(null); setLastEvent(null); setResult(null); load(); }, [id]);
+  useEffect(() => { api.testers().then(setTesters).catch(() => {}); }, [id]);
+
+  // Follow the decision until the bot has sent it (the bot checks every 15 seconds)
+  useEffect(() => {
+    if (!result || !["queued", "scheduled"].includes(result.status)) return;
+    if (result.status === "scheduled" && new Date(result.send_at) - Date.now() > 60000) return;
+    const t = setTimeout(() => api.decision(result.id).then(setResult).catch(() => {}), 4000);
+    return () => clearTimeout(t);
+  }, [result]);
 
   const act = async (key, fn) => {
     setBusy(key);
@@ -35,7 +71,10 @@ function Profile({ id, onDecision }) {
       const decision = res.decision ?? res;
       if (res.event) setLastEvent(res.event);
       await load();
-      if (decision?.id) onDecision(decision.id);
+      if (decision?.id) {
+        setResult(await api.decision(decision.id));
+        onDecision(decision.id);
+      }
     } catch (e) {
       setError(e);
     } finally {
@@ -45,6 +84,12 @@ function Profile({ id, onDecision }) {
 
   if (!data) return error ? <ErrorBox error={error} /> : <Spinner />;
   const p = data.profile;
+  const me = testers.find((t) => t.linked);                    // a linked Telegram tester (e.g. you)
+  const sendHere = async () => {                               // one click: point my Telegram at this customer, then decide
+    await api.relink(me.username, id);
+    api.testers().then(setTesters).catch(() => {});
+    return api.runAgent(id, true);
+  };
 
   return (
     <div className="space-y-5">
@@ -60,7 +105,10 @@ function Profile({ id, onDecision }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => act("ai", () => api.runAgent(id, true))} loading={busy === "ai"}><Bot size={15} /> Run AI agent</Button>
+            {me && data.tester !== me.username && (
+              <Button onClick={() => act("tg", sendHere)} loading={busy === "tg"}><Send size={15} /> Send to @{me.username} (AI)</Button>
+            )}
+            <Button variant={me && data.tester !== me.username ? "secondary" : "primary"} onClick={() => act("ai", () => api.runAgent(id, true))} loading={busy === "ai"}><Bot size={15} /> Run AI agent</Button>
             <Button variant="secondary" onClick={() => act("rules", () => api.runAgent(id, false))} loading={busy === "rules"}>Free rules only</Button>
           </div>
         </div>
@@ -72,6 +120,7 @@ function Profile({ id, onDecision }) {
           {" "}Offers decided during quiet hours (22:00–08:00) are sent at 08:00.
         </p>
         <div className="mt-4"><ErrorBox error={error} /></div>
+        {result && <SendResult d={result} onOpen={() => onDecision(result.id)} />}
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <Fact label="Usual order gap" value={p.usual_gap_days ? `every ${p.usual_gap_days} days` : "–"} />

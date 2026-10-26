@@ -30,6 +30,7 @@ export const api = {
   overview: () => request("/overview"),
   decisions: (params = {}) => request(`/decisions${query(params)}`),
   decision: (id) => request(`/decisions/${id}`),
+  outbox: () => request("/outbox"),
   customers: (search) => request(`/customers${query({ search, limit: 25 })}`),
   suggested: (refresh = false) => request(`/customers/suggested${refresh ? "?refresh=true" : ""}`),
   customer: (id) => request(`/customers/${id}`),

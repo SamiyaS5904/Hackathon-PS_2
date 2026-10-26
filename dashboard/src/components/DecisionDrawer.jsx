@@ -26,6 +26,13 @@ export default function DecisionDrawer({ decisionId, onClose }) {
     api.decision(decisionId).then(setD).catch(setError);
   }, [decisionId]);
 
+  // While an offer is on its way to Telegram, refresh so the status turns to "Sent on Telegram"
+  useEffect(() => {
+    if (!d || d.id !== decisionId || d.status !== "queued") return;
+    const t = setTimeout(() => api.decision(decisionId).then(setD).catch(() => {}), 4000);
+    return () => clearTimeout(t);
+  }, [d, decisionId]);
+
   const r = d?.reasoning ?? {};
   const checks = d?.rule_checks ?? [];
   const passed = checks.filter((c) => c.result === "passed").length;

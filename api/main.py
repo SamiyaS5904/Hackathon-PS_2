@@ -263,6 +263,34 @@ def decisions(limit: int = 50, status: str | None = None, decided_by: str | None
     return [_decision_row(r) for r in db().execute(sql, args)]
 
 
+@app.get("/api/outbox")
+def outbox(limit: int = 40) -> dict:
+    """
+    The offer schedule: who gets which offer, when, and through which channel (a tester's Telegram or
+    'would send' when nobody plays that customer), with expected profit and cost. Newest first.
+    """
+    conn = db()
+    rows = conn.execute("""
+        SELECT d.*, c.first_name, c.telegram_chat_id, t.telegram_username FROM decisions d
+        JOIN customers c ON c.id = d.customer_id
+        LEFT JOIN testers t ON t.customer_id = d.customer_id
+        WHERE d.final_offer IS NOT NULL
+          AND d.status IN ('queued', 'scheduled', 'sent', 'would_send', 'expired', 'cancelled')
+        ORDER BY COALESCE(d.sent_at, d.send_at, d.created_at) DESC LIMIT ?""", (limit,)).fetchall()
+    items = []
+    for r in rows:
+        linked = r["telegram_chat_id"] is not None and r["telegram_username"]
+        items.append({**_decision_row(r),
+                      "goes_at": r["sent_at"] or r["send_at"] or r["created_at"],
+                      "channel": f"Telegram @{r['telegram_username']}" if linked else "Not linked (would send)"})
+    live = [i for i in items if i["status"] in ("queued", "scheduled", "sent", "would_send")]
+    return {"items": items,
+            "totals": {"offers": len(live),
+                       "on_telegram": sum(1 for i in live if i["status"] in ("queued", "scheduled", "sent")),
+                       "expected_profit_rupees": sum(i["expected_profit_rupees"] or 0 for i in live),
+                       "offer_cost_rupees": sum(i["offer_cost_rupees"] or 0 for i in live)}}
+
+
 @app.get("/api/decisions/{decision_id}")
 def decision(decision_id: int) -> dict:
     return _decision_detail(db(), decision_id)

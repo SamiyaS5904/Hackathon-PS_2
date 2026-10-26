@@ -3,7 +3,7 @@
 // decisions over the last 7 days, and the latest decisions (click one to see why).
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, BrainCircuit } from "lucide-react";
+import { AlertTriangle, BrainCircuit, Send } from "lucide-react";
 import { api } from "../api";
 import { DECIDER, inr, ist, TRIGGER } from "../format";
 import DecisionDrawer from "../components/DecisionDrawer";
@@ -65,6 +65,45 @@ function PlanCard({ plan, onSaved }) {
   );
 }
 
+// Who gets which offer, when, through which channel, and what it should earn. Refreshes every 15 seconds.
+function Schedule({ onOpen }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    const load = () => api.outbox().then(setData).catch(() => {});
+    load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, []);
+  if (!data) return <Card title="Offer schedule"><Spinner /></Card>;
+  const t = data.totals;
+  return (
+    <Card title="Offer schedule: who gets what, when"
+          subtitle={`${t.offers} offers · ${t.on_telegram} on Telegram · expected profit ${inr(t.expected_profit_rupees)} · cost if all used ${inr(t.offer_cost_rupees)}`}>
+      {data.items.length === 0 ? <p className="text-sm text-muted">No offers yet. Open a customer and click "Send to … (AI)".</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs text-muted">
+              <tr><th className="py-2 pr-3">When (IST)</th><th className="py-2 pr-3">Customer</th><th className="py-2 pr-3">Offer</th><th className="py-2 pr-3">Goes to</th><th className="py-2 pr-3">Status</th><th className="py-2 text-right">Exp. profit</th></tr>
+            </thead>
+            <tbody className="tabular">
+              {data.items.map((d) => (
+                <tr key={d.id} onClick={() => onOpen(d.id)} className="cursor-pointer border-t border-hairline hover:bg-raised/40">
+                  <td className="whitespace-nowrap py-2 pr-3 text-ink2">{ist(d.goes_at)}</td>
+                  <td className="py-2 pr-3 text-ink">{d.first_name} <span className="text-muted">#{d.customer_id}</span></td>
+                  <td className="py-2 pr-3 text-ink2">{d.offer}{d.offer_kind === "winback" && <span className="ml-2 rounded-full border border-accent/50 px-2 py-0.5 text-[10px] text-[#86b6ef]">win-back</span>}</td>
+                  <td className="whitespace-nowrap py-2 pr-3 text-ink2">{d.channel.startsWith("Telegram") && <Send size={12} className="mr-1 inline text-accent" />}{d.channel}</td>
+                  <td className="py-2 pr-3"><StatusBadge status={d.status} /></td>
+                  <td className="py-2 text-right text-ink">{inr(d.expected_profit_rupees)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function WeekChart({ week }) {
   const data = week.map((d) => ({ ...d, day: new Date(d.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric" }) }));
   const series = ["agent", "fallback", "gatekeeper"];
@@ -121,6 +160,8 @@ export default function Today() {
           <AlertTriangle size={18} /> <span><b>Offers paused (circuit breaker):</b> {overview.circuit_breaker}</span>
         </div>
       )}
+
+      <Schedule onOpen={setOpenId} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <PlanCard plan={plan} onSaved={load} />
