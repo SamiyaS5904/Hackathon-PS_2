@@ -85,6 +85,8 @@ class CustomerProfile:
 
     # money
     discount_dependence: float = 0.0
+    full_price_share_90d: float | None = None   # share of recent orders with no coupon and not on a sale day
+    discounted_orders_90d: int = 0              # coupon-discounted orders in the last 90 days
     wallet_balance_rupees: int = 0
     wallet_idle_days: float | None = None
     points_balance: int = 0
@@ -228,7 +230,27 @@ def _habit(conn: sqlite3.Connection, customer_id: int, now: datetime, now_ts: st
         "high_value": spend // 100 >= HIGH_VALUE_SPEND_RUPEES,
         "discount_dependence": round(sum(1 for r in placed if r["discount_paise"] > 0) / len(placed), 2)
         if placed else 0.0,
+        **_full_price(placed, times, now),
     }
+
+
+FULL_PRICE_MIN_ORDERS = 3      # fewer orders than this: too little to judge a buying habit
+
+
+def _full_price(placed: list, times: list[datetime], now: datetime) -> dict:
+    """
+    Habit protection signal: how much of their buying happens at FULL price (no coupon, not on a sale day).
+    Someone who mostly pays full price is a healthy customer; coupons would only teach them to wait for deals.
+    Uses the last 90 days when there are at least 3 orders in it, otherwise the whole history (slow buyers);
+    None below 3 orders.
+    """
+    recent = [r for r, t in zip(placed, times) if days_between(t, now) <= 90]
+    window = recent if len(recent) >= FULL_PRICE_MIN_ORDERS else placed
+    share = None
+    if len(window) >= FULL_PRICE_MIN_ORDERS:
+        share = round(sum(1 for r in window if not r["discount_paise"] and not r["on_sale"]) / len(window), 2)
+    return {"full_price_share_90d": share,
+            "discounted_orders_90d": sum(1 for r in recent if r["discount_paise"] > 0)}
 
 
 def _favourites(conn: sqlite3.Connection, customer_id: int, now_ts: str, catalog: Catalog
