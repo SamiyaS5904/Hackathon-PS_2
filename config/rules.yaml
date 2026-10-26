@@ -160,7 +160,7 @@ winback:
   # Win-back offers ALSO count against the normal budgets; the margin floor applies as always.
   share_of_daily_budget: 0.3        # at most 30% of the daily budget may go to win-back offers -> reject
   monthly_rupees: 30000             # -> reject
-  per_customer_monthly_rupees: 300  # -> reject
+  per_customer_monthly_rupees: 500  # -> reject (same as the normal per-customer cap: one 10% win-back on a VIP basket must fit)
   min_immediate_profit_rupees: 0    # the immediate order must still not lose money
 
 # -----------------------------------------------------------------------------------------------------
