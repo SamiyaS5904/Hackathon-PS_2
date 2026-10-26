@@ -103,6 +103,15 @@ message:
     - "don't miss out"
     - "before it's gone"
     - "almost gone"
+    # Hinglish pressure (messages can be Hinglish for Hindi-speaking customers)
+    - "jaldi karo"
+    - "jaldi kijiye"
+    - "sirf aaj"
+    - "aakhri mauka"
+    - "stock khatam"
+    - "khatam hone wala"
+    - "mauka mat chhodo"
+    - "abhi kharido"
   banned_claims:                       # claims we can't back up with catalog data -> reject
     - "guaranteed"
     - "lowest price"

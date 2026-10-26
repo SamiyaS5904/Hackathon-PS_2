@@ -482,12 +482,38 @@ _HOURS = re.compile(r"(\d+)\s?(?:hours|hour|hrs|hr)\b", re.IGNORECASE)
 _LINK = re.compile(r"(https?://|www\.|t\.me/|\.com\b|\.in\b|bit\.ly)", re.IGNORECASE)
 
 
+_MIDNIGHT_WORDS = ("midnight", "tonight", "aaj raat", "raat 12")         # English + Hinglish
+_TODAY = re.compile(r"\btoday\b|\baaj\b", re.IGNORECASE)
+
+
+def price_anchor(offer: OfferProposal, product) -> tuple[int, int] | None:
+    """
+    The honest 'before -> after' price of a product offer, computed from the catalog (e.g. Rs 799 -> Rs 719 for 10%
+    off). The agent may write these two numbers ("₹799 → ₹719"); the message check allows exactly these, nothing else.
+    """
+    if not product:
+        return None
+    price = product.price_paise / 100
+    if offer.offer_type == "pct_off" and 0 < offer.amount < 100:
+        return round(price), round(price * (1 - offer.amount / 100))
+    if offer.offer_type == "flat_off" and 0 < offer.amount < price:
+        return round(price), round(price - offer.amount)
+    return None
+
+
+def message_failures(offer: OfferProposal, catalog: Catalog, profile: CustomerProfile, rules: ActiveRules) -> list[str]:
+    """Only the message rules, for one text on an already-checked offer (used to vet every message variant)."""
+    product = catalog.get(offer.product_id)
+    return [f"{rule}: {detail}" for rule, ok, detail in _message_checks(offer, product, profile, rules) if not ok]
+
+
 def _message_checks(offer: OfferProposal, product, profile: CustomerProfile, rules: ActiveRules):
     """
     Message rules (CLAUDE.md 4.6). Yields (rule, passed?, detail).
     'Must match the offer' means: every % and every rupee amount in the text is a real number of THIS offer
-    (amount, minimum order, or the customer's real wallet balance), the named product appears, and any
-    'N hours' equals the real expiry. That stops both mistakes and tricks.
+    (amount, minimum order, the customer's real wallet balance, or the product's real before/after price), the named
+    product appears, and any 'N hours' equals the real expiry. That stops both mistakes and tricks.
+    Deadlines are checked in English and Hinglish ("aaj raat", "aaj").
     """
     m = rules.message
     text = offer.message.strip()
@@ -507,15 +533,17 @@ def _message_checks(offer: OfferProposal, product, profile: CustomerProfile, rul
 
     # Honest deadlines: a real deadline is fine ("valid until midnight"), a fake one is not. The words are allowed
     # only if the offer really ends then (checked after any quiet-hours change to the send time).
-    if offer.send_at and any(w in low for w in ("midnight", "tonight", "today")):
+    says_midnight = any(w in low for w in _MIDNIGHT_WORDS)
+    says_today = bool(_TODAY.search(low))
+    if offer.send_at and (says_midnight or says_today):
         send = to_ist(offer.send_at)
         ends = to_ist(offer.send_at + timedelta(hours=offer.expiry_hours))
         latest = datetime.combine(send.date() + timedelta(days=1), time(0, 59), tzinfo=IST)
         earliest_midnight = datetime.combine(send.date(), time(23, 0), tzinfo=IST)
         problems = []
-        if ("midnight" in low or "tonight" in low) and not earliest_midnight <= ends <= latest:
+        if says_midnight and not earliest_midnight <= ends <= latest:
             problems.append(f"says midnight/tonight, but the offer ends {ends:%d %b %H:%M} IST")
-        if "today" in low and ends > latest:
+        if says_today and ends > latest:
             problems.append(f"says today, but the offer ends {ends:%d %b %H:%M} IST")
         yield ("message.honest_deadline", not problems,
                ("Deadline in the message is not true: " + "; ".join(problems) + ".") if problems
@@ -542,6 +570,9 @@ def _message_checks(offer: OfferProposal, product, profile: CustomerProfile, rul
                         f"{offer.describe()}")
     rupees = {float(x.replace(",", "")) for x in _RUPEES.findall(text) + _RUPEES_AFTER.findall(text)}
     allowed = {float(offer.min_order_rupees), float(profile.wallet_balance_rupees)}
+    anchor = price_anchor(offer, product)
+    if anchor:
+        allowed |= {float(anchor[0]), float(anchor[1])}   # honest "₹799 → ₹719", computed from the catalog
     if t in ("flat_off", "cashback_to_wallet"):
         allowed.add(float(offer.amount))
         if offer.amount not in rupees:
