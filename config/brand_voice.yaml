@@ -27,3 +27,19 @@ examples:
   - "Hi Aarohi, your Mira Lipstick Plus is still waiting for you. Enjoy complimentary delivery on orders above ₹299, valid for the next 48 hours. 💄"
   - "Hi Neha, as one of our loyal customers, here's 3x reward points on your next grocery order. Your 302 points expiring on 26 Oct can be used on it too."
   - "Hi Farhan, still thinking about the Urban Thread Kurta Neo? Here's 10% off it, valid until midnight tonight."
+
+# v2: message variants. The agent writes 2-3 variants in different tones and sends the one that fits best.
+tones:
+  - "deal seeker (buys in sales, high deal-seeker score): price-first, lead with the exact saving"
+  - "lapsing VIP (late, high spend): warm and personal, 'we miss you' without guilt-tripping"
+  - "cart / interest: product-specific, name the product they left or looked at"
+  - "loyal regular (buys anyway): a thank-you with a perk, never a discount"
+
+# Language per customer: Hinglish (Roman-script Hindi mixed with English) for customers whose language is in
+# hinglish_for, English for everyone else. Same honesty rules in both languages.
+languages:
+  default: english
+  hinglish_for: [Hindi]
+hinglish_examples:
+  - "Hi Riya, aapka favourite Urban Thread Kurta Neo ab 10% off pe, ₹999 se upar ke orders par. Offer agle 48 ghante tak valid hai."
+  - "Hi Aman, aapke 302 reward points 26 Oct ko expire ho rahe hain. Agle order pe use kar lijiye!"

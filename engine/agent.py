@@ -39,17 +39,16 @@ from typing import Any
 
 from pydantic import ValidationError
 
-import yaml
-
-from config.settings import CONFIG_DIR, settings
+from config.settings import settings
 from engine.candidates import build_candidates
 from engine.catalog import Catalog
 from engine.clock import IST, ist_date, to_ist
 from engine.features import CustomerProfile
 from engine.models import CheckResult, OfferProposal
 from engine.profit import estimate
-from engine.rules import RuleState, check_offer
+from engine.rules import RuleState, check_offer, message_failures, price_anchor
 from engine.rules_store import ActiveRules
+from engine.voice import brand_voice, message_language
 
 MAX_API_CALLS = 6
 MAX_REJECTED_PROPOSALS = 2
@@ -131,6 +130,10 @@ when the habit is clearly broken or interest is fading, act now.
   or propose_no_offer. After 2 rejections the decision is taken away from you.
 
 ## The message to the customer
+Write 2-3 VARIANTS of the message in different tones (ids "A", "B", "C") and choose the one that best fits this
+customer's signals; say why in why_this_variant. Every variant is checked by the rules, so each must be honest and
+exact on its own. Write all variants in message_language from the limits (english or hinglish). If the candidate
+shows a price_anchor, a variant may show it as "₹before → ₹after" with exactly those two numbers.
 {voice}
 Facts the message must get exactly right (the rules check every one):
 - The real numbers of the offer: the % or rupee amount (use the ₹ sign), the minimum order if any, and the product name
@@ -158,13 +161,16 @@ mention it in your reasoning."""
 
 def _brand_voice_text() -> str:
     """The brand voice from config/brand_voice.yaml, written as prompt lines (read once, so the prompt stays cacheable)."""
-    with open(CONFIG_DIR / "brand_voice.yaml", encoding="utf-8") as f:
-        v = yaml.safe_load(f)
-    lines = [f"- Voice: {v['voice']}. Language: {v['language']}."]
+    v = brand_voice()
+    lines = [f"- Voice: {v['voice']}."]
     lines += [f"- {rule}" for rule in v.get("do", [])]
     lines += [f"- Don't: {rule}" for rule in v.get("dont", [])]
-    lines += ["- Examples of the voice:"] + [f'  "{ex}"' for ex in v.get("examples", [])]
+    lines += ["- Examples of the voice (English):"] + [f'  "{ex}"' for ex in v.get("examples", [])]
+    lines += ["- Examples in Hinglish (Roman script, natural mix, same premium warmth):"]
+    lines += [f'  "{ex}"' for ex in v.get("hinglish_examples", [])]
+    lines += ["- Tones for the variants, by what the profile shows:"] + [f"  {t}" for t in v.get("tones", [])]
     return "\n".join(lines)
+
 
 
 SYSTEM_PROMPT = SYSTEM_PROMPT.replace("{voice}", _brand_voice_text())
@@ -233,12 +239,24 @@ def build_tools(catalog: Catalog) -> list[dict]:
                                          "send_at_ist": {"type": ["string", "null"],
                                                          "description": "Send time as 'YYYY-MM-DD HH:MM' in IST, or "
                                                                         "null to send now."},
-                                         "message": {"type": "string"},
+                                         "variants": {
+                                             "type": "array",
+                                             "description": "2 or 3 message variants in different tones.",
+                                             "items": {"type": "object",
+                                                       "properties": {"id": {"type": "string"},
+                                                                      "tone": {"type": "string"},
+                                                                      "text": {"type": "string"}},
+                                                       "required": ["id", "tone", "text"],
+                                                       "additionalProperties": False}},
+                                         "chosen_variant_id": {"type": "string"},
+                                         "why_this_variant": {"type": "string"},
                                          "reasoning": reasoning_schema},
-                          "required": [*offer_props, "send_at_ist", "message", "reasoning"],
+                          "required": [*offer_props, "send_at_ist", "variants", "chosen_variant_id",
+                                       "why_this_variant", "reasoning"],
                           "additionalProperties": False},
-         "description": "Final decision: send this offer. It is checked against the company's rules; if rejected you "
-                        "get the reasons and may propose again."},
+         "description": "Final decision: send this offer, with 2-3 message variants and the one to send. The offer "
+                        "and every variant are checked against the company's rules; if rejected you get the reasons "
+                        "and may propose again."},
         {"name": "propose_no_offer", "strict": True,
          "input_schema": {"type": "object", "properties": {"reasoning": reasoning_schema},
                           "required": ["reasoning"], "additionalProperties": False},
@@ -329,6 +347,7 @@ def tool_offer_limits(ctx: AgentContext) -> dict:
         # For an honest "valid until midnight tonight": send now with exactly this expiry (the rules verify it)
         "hours_until_midnight_ist": _hours_until_midnight(ctx.now),
         "customer_is_loyal": p.total_orders >= r.fairness["loyal_min_orders"],
+        "message_language": message_language(p),
         "can_wait": ctx.allow_wait,
         "message_rules": {"max_chars": r.message["max_chars"], "links_allowed": r.message["allow_links"],
                           "banned_phrases": r.message["banned_phrases"] + r.message.get("banned_claims", []),
@@ -345,7 +364,15 @@ def _offer_from_input(data: dict) -> OfferProposal:
     return OfferProposal(
         offer_type=data["offer_type"], amount=data.get("amount") or 0, product_id=data.get("product_id"),
         category=data.get("category"), min_order_rupees=data.get("min_order_rupees") or 0,
-        expiry_hours=data.get("expiry_hours") or 24, send_at=send_at, message=data.get("message", ""))
+        expiry_hours=data.get("expiry_hours") or 24, send_at=send_at, message=_chosen_text(data))
+
+
+def _chosen_text(data: dict) -> str:
+    """The message to send: the chosen variant's text (or a plain 'message', used by older scripted tests)."""
+    for v in data.get("variants") or []:
+        if v.get("id") == data.get("chosen_variant_id"):
+            return v.get("text", "")
+    return data.get("message", "")
 
 
 def _hours_until_midnight(now: datetime) -> int:
@@ -381,6 +408,8 @@ def tool_estimate_profit(ctx: AgentContext, data: dict) -> dict:
             "margin_after_offer_pct": e.margin_after_offer_pct,
             "expected_profit_rupees": e.expected_profit_paise // 100,
             **({"offer_kind": check.offer_kind} if check.ok else {}),
+            **({"price_anchor": price_anchor(check.offer, ctx.catalog.get(check.offer.product_id))}
+               if check.ok and price_anchor(check.offer, ctx.catalog.get(check.offer.product_id)) else {}),
             **({"retention_value_rupees": e.retention_value_paise // 100,
                 "total_value_rupees": e.total_value_paise // 100} if e.is_late_customer else {}),
         })
@@ -582,9 +611,37 @@ def _propose(ctx: AgentContext, data: dict, outcome: AgentOutcome, trace: dict) 
         outcome.tool_trace.append(trace)
         return f"REJECTED: the proposal is not valid ({exc}). Fix it and propose again.", True, False
 
+    variants = data.get("variants") or []
+    if "variants" in data and not (2 <= len(variants) <= 3 and any(v.get("id") == data.get("chosen_variant_id")
+                                                                  for v in variants)):
+        outcome.rejected_proposals += 1
+        trace["result"] = "invalid proposal: needs 2-3 variants and a chosen_variant_id that is one of them"
+        outcome.tool_trace.append(trace)
+        return ("REJECTED: write 2 or 3 message variants and set chosen_variant_id to one of their ids. "
+                "Propose again."), True, False
+
     check = check_offer(offer, ctx.profile, ctx.catalog, ctx.rules, ctx.state, ctx.now)
+    if check.ok and variants:
+        # Every variant must pass the message rules on the FINAL offer, so no dishonest variant is ever stored
+        others = [f"variant {v['id']}: {f}" for v in variants if v.get("id") != data.get("chosen_variant_id")
+                  for f in message_failures(check.offer.model_copy(update={"message": v.get("text", "")}),
+                                            ctx.catalog, ctx.profile, ctx.rules)]
+        if others:
+            outcome.rejected_proposals += 1
+            left = MAX_REJECTED_PROPOSALS - outcome.rejected_proposals
+            trace["result"] = "rejected: " + "; ".join(others)
+            outcome.tool_trace.append(trace)
+            return ("REJECTED: the chosen message is fine, but other variants break the message rules:\n- "
+                    + "\n- ".join(others) + (f"\nYou have {left} more attempt(s): fix or drop those variants."
+                                             if left > 0 else "\nNo attempts left.")), True, False
     if check.ok:
         outcome.status, outcome.check, outcome.reasoning = "approved", check, data.get("reasoning", {})
+        if variants:
+            lang = message_language(ctx.profile)
+            outcome.variants = [{"id": v["id"], "tone": v.get("tone", ""), "text": v.get("text", ""), "language": lang}
+                                for v in variants]
+            outcome.variant_id = data.get("chosen_variant_id")
+            outcome.reasoning = {**outcome.reasoning, "why_this_variant": data.get("why_this_variant", "")}
         repairs = [f"{c.rule}: {c.detail}" for c in check.checks if c.result == "repaired"]
         trace["result"] = f"{check.status}: {check.offer.describe()}" + (f" (repairs: {'; '.join(repairs)})"
                                                                           if repairs else "")

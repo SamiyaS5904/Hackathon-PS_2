@@ -29,7 +29,7 @@ from datetime import datetime
 from engine.catalog import Catalog
 from engine.features import CustomerProfile
 from engine.models import CheckResult, OfferProposal
-from engine.rules import RuleState, check_offer
+from engine.rules import RuleState, check_offer, price_anchor
 from engine.rules_store import ActiveRules
 
 EXPIRY_HOURS = 48
@@ -128,6 +128,9 @@ def build_candidates(profile: CustomerProfile, catalog: Catalog, rules: ActiveRu
             entry["offer"] = {"offer_type": offer.offer_type, "amount": offer.amount, "product_id": offer.product_id,
                               "product_name": product.name if product else None, "category": offer.category,
                               "min_order_rupees": offer.min_order_rupees, "expiry_hours": offer.expiry_hours}
+            anchor = price_anchor(offer, product)
+            if anchor:
+                entry["price_anchor"] = {"before_rupees": anchor[0], "after_rupees": anchor[1]}
             repairs = [c.detail for c in res.checks if c.result == "repaired" and c.rule != "anti_spam.quiet_hours"]
             if repairs:
                 entry["rules_adjusted"] = repairs

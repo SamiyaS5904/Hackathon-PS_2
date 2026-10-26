@@ -32,6 +32,7 @@ from engine.features import CustomerProfile
 from engine.models import CheckResult, OfferProposal
 from engine.rules import RuleState, check_offer
 from engine.rules_store import ActiveRules
+from engine.voice import message_language
 
 HABIT_OVERDUE_RATIO = 1.5
 COMEBACK_INACTIVE_DAYS = 30
@@ -161,12 +162,14 @@ def fallback_decide(profile: CustomerProfile, catalog: Catalog, rules: ActiveRul
     If none pass (or none fit), the decision is 'send nothing', with every reason listed.
     """
     templates = load_templates()
+    language = message_language(profile)   # 'hinglish' templates for Hindi-speaking customers
     candidates, tried = build_candidates(profile, catalog, rules)
     tried = [{"rule": s["rule"], "outcome": "did not apply", "detail": s["why_not"]} for s in tried]
 
     for candidate in candidates:
         def render(offer: OfferProposal, c: Candidate = candidate) -> str:
-            return templates[c.template]["message"].format(**template_values(c, offer, profile, now))
+            text = templates[c.template].get(f"message_{language}") or templates[c.template]["message"]
+            return text.format(**template_values(c, offer, profile, now))
 
         check = check_offer(candidate.offer, profile, catalog, rules, state, now, message_renderer=render)
         if check.ok:
