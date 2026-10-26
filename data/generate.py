@@ -19,6 +19,8 @@ How it works (simple version):
          adds and cart activity (including abandoned carts).
        - Orders get items (often their favourites), a payment method, maybe points used, a status
          (delivered / cancelled / returned), points earned, wallet refunds and cashback.
+       - Discount training (data/habits.py): each coupon-discounted order makes them wait a bit more for deals
+         (fewer orders on normal days, more in sales); months without coupons slowly undo it.
        - Wallet top-ups happen now and then; reward points expire after 90 days.
   4. Save everything, check that all links between tables are valid, and print a summary per persona
      so we can see the patterns are real.
@@ -42,6 +44,7 @@ from pathlib import Path
 from config.settings import settings
 from data.calendar_gen import build_calendar, festival_name_on, is_payday, is_weekend
 from data.catalog import build_customer_identity, build_products
+from data.habits import DealHabit, revival_chance
 from data.personas import CustomerTraits, PersonaSpec, choose_persona, sample_traits
 from db.store import connect, init_schema, insert_many
 
@@ -87,7 +90,7 @@ COLUMNS: dict[str, tuple[str, ...]] = {
     "customer_traits": ("customer_id", "persona", "price_sensitivity", "deal_affinity", "churn_propensity",
                         "spam_tolerance", "base_order_gap_days", "habit_regularity", "cart_abandon_prob",
                         "peak_hour", "category_weights", "favourite_product_ids", "habit_break_date",
-                        "true_uplift"),
+                        "true_uplift", "wait_for_deal"),
     "products": ("id", "name", "category", "subcategory", "brand", "price_paise", "cost_paise", "margin_pct"),
     "sessions": ("id", "customer_id", "start_ts", "end_ts", "device", "source"),
     "browse_events": ("id", "session_id", "customer_id", "ts", "event_type", "product_id", "query"),
@@ -189,7 +192,10 @@ class CustomerSimulator:
         self.identity = identity
         self.signup_idx = signup_idx
         self.ctx = ctx
-        self.rng = ctx.rng
+        # Each customer's days use their own random stream: a change in one customer's behaviour (e.g. discount
+        # training) can't shift the names, personas and traits of every customer generated after them.
+        self.rng = random.Random(f"{ctx.seed}-sim-{customer_id}")
+        self.habit = DealHabit()  # hidden: how much coupons have taught them to wait for deals (data/habits.py)
 
         gap = traits.base_order_gap_days
         if spec.name == "new_user":
@@ -262,6 +268,7 @@ class CustomerSimulator:
     # -- the daily loop --------------------------------------------------------------------------
     def run(self) -> None:
         for day_idx in range(self.signup_idx, len(self.ctx.days)):
+            self.habit.pass_days(1)
             if day_idx in self.campaign_plan:
                 if self.active_offer:
                     self._close_offer()
@@ -320,6 +327,7 @@ class CustomerSimulator:
         if self.ctx.weekend[day_idx]:
             p *= spec.weekend_lift
         p *= self._habit_factor(day_idx)
+        p *= self.habit.order_factor(self.ctx.festival[day_idx])  # coupon-trained: less on normal days, more in sales
 
         if self._offer_is_working():
             offer_type = self.active_offer["record"]["campaign"].offer_type
@@ -470,6 +478,11 @@ class CustomerSimulator:
                     points_multiplier = int(campaign.value)
                 # early_access: no money effect; buying in the early-access category counts as redeemed
 
+        if discount or cashback_paise:
+            self.habit.coupon_order()  # a coupon-discounted order teaches them to wait for the next deal
+        if (offer_working and self.traits.habit_break_day is not None and day_idx >= self.traits.habit_break_day
+                and self.rng.random() < revival_chance()):
+            self.traits.habit_break_day = None  # an offer brought a lapsing customer back: the habit revives
         payable = gross - discount
         delivery_fee = 0 if (waive_delivery or payable >= FREE_DELIVERY_ABOVE_PAISE) else DELIVERY_FEE_PAISE
         net = payable + delivery_fee
@@ -571,6 +584,7 @@ class CustomerSimulator:
 @dataclass
 class SimContext:
     rng: random.Random
+    seed: int
     ids: Ids
     buf: Buffers
     days: list[date]
@@ -595,7 +609,7 @@ def generate(n_customers: int, months: int, end_date: date, seed: int, db_path: 
         products_by_category.setdefault(p["category"], []).append(p)
 
     ctx = SimContext(
-        rng=rng, ids=Ids(), buf=Buffers(), days=days,
+        rng=rng, seed=seed, ids=Ids(), buf=Buffers(), days=days,
         festival=[festival_name_on(d) is not None for d in days],
         payday=[is_payday(d) for d in days],
         weekend=[is_weekend(d) for d in days],
@@ -626,14 +640,16 @@ def generate(n_customers: int, months: int, end_date: date, seed: int, db_path: 
         ctx.buf.add("customers", (customer_id, identity["first_name"], identity["last_name"], identity["gender"],
                                   identity["age"], identity["city"], identity["city_tier"], signup_date.isoformat(),
                                   identity["device"], identity["language"], identity["marketing_consent"], None))
+        sim = CustomerSimulator(customer_id, spec, traits, identity, signup_idx, ctx)
+        sim.run()
+
         break_date = days[traits.habit_break_day].isoformat() if traits.habit_break_day is not None else None
         ctx.buf.add("customer_traits", (customer_id, traits.persona, traits.price_sensitivity, traits.deal_affinity,
                                         traits.churn_propensity, traits.spam_tolerance, traits.base_order_gap_days,
                                         traits.habit_regularity, traits.cart_abandon_prob, traits.peak_hour,
                                         json.dumps(traits.category_weights), json.dumps(traits.favourite_product_ids),
-                                        break_date, json.dumps(traits.true_uplift)))
-
-        CustomerSimulator(customer_id, spec, traits, identity, signup_idx, ctx).run()
+                                        break_date, json.dumps(traits.true_uplift),
+                                        round(sim.habit.wait_for_deal, 4)))
 
         if customer_id % FLUSH_EVERY == 0:
             ctx.buf.flush(conn)

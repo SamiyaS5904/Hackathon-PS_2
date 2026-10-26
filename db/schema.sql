@@ -183,7 +183,8 @@ CREATE TABLE IF NOT EXISTS customer_traits (
     category_weights      TEXT NOT NULL,      -- JSON {category: weight}
     favourite_product_ids TEXT NOT NULL,      -- JSON [product ids they love to reorder]
     habit_break_date      TEXT,               -- date their habit started breaking (NULL = never)
-    true_uplift           TEXT NOT NULL       -- JSON {offer_type: extra buy chance during an offer}
+    true_uplift           TEXT NOT NULL,      -- JSON {offer_type: extra buy chance during an offer}
+    wait_for_deal         REAL NOT NULL DEFAULT 0  -- learned habit of waiting for coupons at data end (data/habits.py)
 );
 
 -- ---------------------------------------------------------------------------------------------------

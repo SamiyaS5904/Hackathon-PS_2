@@ -1,0 +1,16 @@
+# Discount training: how coupons change a customer's habit over time (used by the data generator and by the
+# hidden-truth referee in harness/; never by the engine, which must learn habits from data like a real shop).
+#
+# Every coupon-discounted order makes the customer a bit more likely to WAIT for the next deal: on normal days they
+# order less, on sale days more. Months without a coupon slowly undo it.
+discount_training:
+  step_per_discounted_order: 0.06   # wait_for_deal rises by this after each coupon-discounted order
+  max_wait_for_deal: 0.60           # it never goes above this
+  half_life_days: 45                # without coupons it halves every 45 days (habit slowly recovers)
+
+# Win-back revival: when a customer whose habit has broken orders BECAUSE of an offer, their habit comes back with
+# this chance (they're reminded why they liked the shop). Without it, no offer could ever save a lapsing customer
+# and long-term value would be impossible by design. Generator and referee use the same number; the engine has its
+# own, separate estimate (rules.yaml retention.churn_avoidance_share), which it must get right on its own.
+revival:
+  chance_after_offer_order: 0.35
