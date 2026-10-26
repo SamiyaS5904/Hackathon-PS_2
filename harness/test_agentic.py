@@ -39,7 +39,7 @@ def test_agent_prices_several_ideas_in_one_call(profile, catalog, rules, state, 
 
     ideas = [dict(offer_input(), amount=a) for a in (10, 50)]  # 50% is over the fashion cap -> repaired
     for i in ideas:
-        for k in ("send_at_ist", "message", "reasoning"):
+        for k in ("send_at_ist", "variants", "chosen_variant_id", "why_this_variant", "reasoning"):
             i.pop(k)
     run_agent(ctx(profile, catalog, rules, state, now),
               client=ScriptedClient([tool_call("estimate_profit", {"ideas": ideas}), read_prices]))

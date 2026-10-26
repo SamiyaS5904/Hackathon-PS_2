@@ -87,10 +87,15 @@ REASONING = {
 
 
 def offer_input(**overrides) -> dict:
-    """A complete propose_offer / estimate_profit input (strict schemas need every field)."""
+    """
+    A complete propose_offer input (strict schemas need every field). A `message=` override becomes two variants
+    with that text (A chosen), so older tests that think in one message keep working.
+    """
+    message = overrides.pop("message", "Hi Riya! Get 15% off on fashion above ₹999, valid for 24 hours.")
     data = {"offer_type": "pct_off", "amount": 15, "product_id": None, "category": "fashion",
             "min_order_rupees": 999, "expiry_hours": 24, "send_at_ist": None,
-            "message": "Hi Riya! Get 15% off on fashion above ₹999, valid for 24 hours.", "reasoning": REASONING}
+            "variants": [{"id": "A", "tone": "warm", "text": message}, {"id": "B", "tone": "price-first", "text": message}],
+            "chosen_variant_id": "A", "why_this_variant": "Warm fits this customer.", "reasoning": REASONING}
     data.update(overrides)
     return data
 
@@ -98,6 +103,6 @@ def offer_input(**overrides) -> dict:
 def estimate_input(**overrides) -> dict:
     """estimate_profit takes a LIST of ideas (up to 6); this builds a one-idea list."""
     idea = offer_input(**overrides)
-    for key in ("send_at_ist", "message", "reasoning"):
+    for key in ("send_at_ist", "variants", "chosen_variant_id", "why_this_variant", "reasoning"):
         idea.pop(key, None)
     return {"ideas": [idea]}
