@@ -688,3 +688,44 @@ who aren't late); free rules Rs 388 / 65%; no offers 65%. Honest reading: protec
 this referee (coupon training is mild) and keeps the full-price share higher.
 
 **Next:** paid runs (asked first): "before" = engine at commit `3dc1cff` on the same data; "after" = current engine.
+
+## 2026-10-26: v2 results: paid before/after comparison (~Rs 86)
+Same data, same 24 customers (3 per hidden persona), same moment, scored by the same 12-week hidden-truth referee.
+"Before" = engine at commit `3dc1cff` (v1 rules, run from a temporary checkout); "after" = v2 engine.
+Evidence: `docs/evidence/v2_before_engine_3dc1cff_2026-10-26.txt`, `docs/evidence/v2_after_engine_2026-10-26.txt`.
+
+| AI + rules | Before (v1 engine) | After (v2 engine) | Change |
+|---|---|---|---|
+| True 12-week profit | Rs 1,709 | Rs 1,515 | −Rs 194 (−11%) |
+| True 48h profit | Rs 1,099 | Rs 982 | −Rs 117 |
+| Offers sent | 22 | 21 | −1 |
+| Full-price share of orders, next 12 weeks | 59% | 59% | 0 |
+
+Reference (same referee): send to all Rs 2,692 / 24 offers / 55%; send to all + rules Rs 2,046 → Rs 1,076 (v2 rules)
+/ 56% → 59%; free rules Rs 388 / 65%; no offers 65% full-price share. AI scenarios (v2): 14/16, reasoning complete
+in all 16 (fails: window shopper #217 Rs 100 off a Rs 499 order = 20%; new user #94 10% off a Rs 1,819 item, cost
+> Rs 100; the before engine chose the same two offers).
+
+**What changed:** 19 of 24 AI decisions were identical. The 5 that changed sum to −Rs 192 over 12 weeks:
+- loyal regular #2917: 8% off → nothing (+4): habit protection working as intended
+- cart abandoner #1176: 10% off → early access (−7): habit protection; a coupon was worth slightly more here
+- window shopper #2265: 10% off → free delivery (+2)
+- VIP #794: Rs 400 off fashion → 10% off a favourite product (−74): both win-back-style offers
+- VIP #243: early access → free delivery (−117): early access was allowed in both versions; this is the AI
+  choosing differently, not a v2 rule
+
+**Honest reading:**
+- v2 did **not** improve 12-week profit or the full-price share on this sample; most of the −Rs 194 comes from one
+  AI choice (#243) no v2 rule forced. With 24 customers, differences of this size are within run-to-run noise.
+- Both engines **fail** the pass bar on the new data: send-to-all wins over 12 weeks (Rs 2,692) because the referee's
+  revival makes discounts to *every* VIP-at-risk very valuable, including ones whose habit already broke but who
+  still look on schedule from visible data (e.g. #243, overdue 0.53). The engine can only call a customer "late"
+  from what it sees.
+- Habit protection costs a little profit here because the referee's coupon-training effect is mild (+0.06 per coupon
+  order, halving in 45 days); the full-price share didn't move because the v1 AI already rarely gave coupons to
+  full-price customers.
+- What v2 adds regardless: retention-aware value with a capped win-back budget, a habit rule the marketing team can
+  tune, honest variants/anchors/Hinglish, and the ability to run on a real shop's export.
+
+**Possible next steps (not done, need a decision):** a lateness signal that catches hidden breaks earlier (e.g. falling
+order frequency, not just days overdue); habit threshold 0.7 → 0.8; larger AI samples to separate signal from noise.

@@ -1,0 +1,87 @@
+
+TRUE profit vs sending nothing, 24 customers (3 per hidden persona), moment 22 Oct 2026 06:30 UTC
+
+  12-week profit by persona
+  persona                    send to all   send to all + rules       free rules only            AI + rules
+  loyal_regular                   Rs -19                  Rs 0                  Rs 0                  Rs 0
+  deal_hunter                     Rs 400                Rs 400                 Rs 39                Rs 275
+  vip_at_risk                   Rs 1,951                Rs 529                Rs 303                Rs 889
+  window_shopper                   Rs 16                 Rs 14                  Rs 0                 Rs 24
+  new_user                         Rs 49                 Rs 45                  Rs 5                Rs 108
+  cart_abandoner                  Rs 192                  Rs 0                  Rs 0                Rs 109
+  points_hoarder                    Rs 0                 Rs -0                  Rs 3                 Rs 19
+  festival_only                   Rs 102                 Rs 89                 Rs 38                 Rs 92
+  TOTAL 12 weeks                Rs 2,692              Rs 1,076                Rs 388              Rs 1,515
+  TOTAL 48 hours                Rs 1,473                Rs 853                Rs 340                Rs 982
+  offers sent                         24                    12                     7                    21
+  full-price share                   55%                   59%                   65%                   59%
+
+  Full-price share of orders: history 55% · next 12 weeks with no offers 65%
+
+  AI decisions:
+    loyal_regular   #2917  product_interest no_offer  nothing                                            48h Rs     0 12w Rs      0
+    loyal_regular   #1910  product_interest waiting   nothing                                            48h Rs     0 12w Rs      0
+    loyal_regular   #478   wallet_idle      no_offer  nothing                                            48h Rs     0 12w Rs      0
+    deal_hunter     #1212  product_interest approved  Rs 250 off on fashion (min order Rs 900)           48h Rs   148 12w Rs    117
+    deal_hunter     #1853  wallet_idle      approved  Rs 150 off on fashion (min order Rs 500)           48h Rs    93 12w Rs    136
+    deal_hunter     #593   cart_abandoned   approved  10% off on product #139 (min order Rs 499)         48h Rs    44 12w Rs     22
+    vip_at_risk     #794   habit_break      approved  10% off on product #82 (min order Rs 1689)         48h Rs   115 12w Rs    423
+    vip_at_risk     #243   product_interest approved  free delivery (min order Rs 299)                   48h Rs    27 12w Rs    131
+    vip_at_risk     #844   product_interest approved  early access to fashion                            48h Rs   109 12w Rs    336
+    window_shopper  #381   product_interest approved  10% off on fashion (min order Rs 499)              48h Rs    25 12w Rs      7
+    window_shopper  #217   product_interest approved  Rs 100 off on fashion (min order Rs 499)           48h Rs    13 12w Rs      6
+    window_shopper  #2265  product_interest approved  free delivery (min order Rs 999)                   48h Rs    17 12w Rs     10
+    new_user        #94    cart_abandoned   approved  10% off on product #67 (min order Rs 1819)         48h Rs    64 12w Rs     61
+    new_user        #300   product_interest approved  10% off on product #107 (min order Rs 899)         48h Rs    15 12w Rs     25
+    new_user        #1688  product_interest approved  early access to fashion                            48h Rs    43 12w Rs     21
+    cart_abandoner  #1033  product_interest approved  early access to fashion                            48h Rs    20 12w Rs     21
+    cart_abandoner  #1176  product_interest approved  early access to fashion                            48h Rs    14 12w Rs     21
+    cart_abandoner  #277   product_interest approved  early access to fashion                            48h Rs    48 12w Rs     66
+    points_hoarder  #1381  product_interest approved  3x reward points                                   48h Rs    47 12w Rs      2
+    points_hoarder  #1821  product_interest approved  10% off on product #168 (min order Rs 1359)        48h Rs    13 12w Rs     14
+    points_hoarder  #799   product_interest approved  reminder message (no discount)                     48h Rs    11 12w Rs      3
+    festival_only   #1192  product_interest approved  8% off on product #47 (min order Rs 2499)          48h Rs    33 12w Rs     23
+    festival_only   #1653  points_expiring  approved  early access to electronics                        48h Rs    61 12w Rs     37
+    festival_only   #1770  wallet_idle      approved  15% off on beauty (min order Rs 999)               48h Rs    21 12w Rs     32
+
+  New AI calls this run: 24 ($0.496 ~ Rs 44); the rest came from saved answers.
+  RESULT: FAIL - AI + rules 12w Rs 1,515 vs send to all Rs 2,692; 48h Rs 982 vs Rs 1,473 (must be higher on both, and above 0)
+=================== EVAL ===================
+
+AI scenario check: 14/16 passed (pass bar 14/16)
+
+  PASS  loyal_regular   #2917  product_interest -> no_offer                                          
+        expected: nothing or a zero-cost perk, no discount (buys anyway); reasoning complete
+  PASS  loyal_regular   #1910  product_interest -> waiting 24h                                       
+        expected: nothing or a zero-cost perk, no discount (buys anyway); reasoning complete
+  PASS  deal_hunter     #1212  product_interest -> Rs 250 off on fashion (min order Rs 900)          
+        expected: an offer (reacts strongly to deals); reasoning complete
+  PASS  deal_hunter     #1853  wallet_idle      -> Rs 150 off on fashion (min order Rs 500)          
+        expected: an offer (reacts strongly to deals); reasoning complete
+  PASS  vip_at_risk     #794   habit_break      -> 10% off on product #82 (min order Rs 1689)        
+        expected: a comeback offer (habit broken, high value); reasoning complete
+  PASS  vip_at_risk     #243   product_interest -> free delivery (min order Rs 299)                  
+        expected: a comeback offer (habit broken, high value); reasoning complete
+  PASS  window_shopper  #381   product_interest -> 10% off on fashion (min order Rs 499)             
+        expected: nothing or a small offer (rarely converts); reasoning complete
+  FAIL  window_shopper  #217   product_interest -> Rs 100 off on fashion (min order Rs 499)          
+        expected: nothing or a small offer (rarely converts); reasoning complete
+  FAIL  new_user        #94    cart_abandoned   -> 10% off on product #67 (min order Rs 1819)        
+        expected: low-risk: no offer costing more than Rs 100; reasoning complete
+  PASS  new_user        #300   product_interest -> 10% off on product #107 (min order Rs 899)        
+        expected: low-risk: no offer costing more than Rs 100; reasoning complete
+  PASS  cart_abandoner  #1033  cart_abandoned   -> early access to fashion                           
+        expected: an offer tied to the fresh cart, or a deliberate wait; reasoning complete
+  PASS  cart_abandoner  #1176  cart_abandoned   -> early access to fashion                           
+        expected: an offer tied to the fresh cart, or a deliberate wait; reasoning complete
+  PASS  points_hoarder  #1381  product_interest -> 3x reward points                                  
+        expected: points / free nudge rather than a big discount; reasoning complete
+  PASS  points_hoarder  #1821  product_interest -> 10% off on product #168 (min order Rs 1359)       
+        expected: points / free nudge rather than a big discount; reasoning complete
+  PASS  festival_only   #1192  product_interest -> 8% off on product #47 (min order Rs 2499)         
+        expected: no big discount outside a sale; reasoning complete
+  PASS  festival_only   #1653  points_expiring  -> early access to electronics                       
+        expected: no big discount outside a sale; reasoning complete
+
+  New AI calls: 2 ($0.034 ~ Rs 3); others reused saved answers.
+  RESULT: PASS

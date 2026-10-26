@@ -11,8 +11,10 @@ past campaigns) → the right offer for the right person at the right moment, wi
 
 | Check | Result |
 |---|---|
-| True profit, 24 customers across 8 hidden personas | v2 (12-week + 48h) numbers: see [documentation.md](documentation.md) (latest "v2 results" entry) |
-| AI behaviour in 16 golden scenarios | v1: 14/16 (pass bar 14), reasoning complete in all 16 |
+| True 12-week profit, 24 customers across 8 hidden personas (v2 data and referee) | AI + rules **₹1,515** (v1 engine ₹1,709), free rules ₹388, send an offer to everyone **₹2,692**: send-to-all still wins over 12 weeks on this referee (see "v2 results" in [documentation.md](documentation.md)) |
+| Full-price share of orders in the next 12 weeks | AI + rules 59% (v1 engine 59%), send to all 55%, no offers 65% |
+| Offers sent | AI + rules 21 of 24 (v1 engine 22) |
+| AI behaviour in 16 golden scenarios | 14/16 (pass bar 14), reasoning complete in all 16 |
 | Automatic tests | 193 pass: every rule, thousands of random offers (hypothesis), attacks, every AI failure path, the CSV importer |
 | Approved offers with negative total expected value | **0** (total = immediate profit + retention value, by construction); the **10% margin floor holds on every offer**. Normal offers also need ≥ ₹20 immediate profit; win-back offers may rely on retention value, inside their own smaller budget |
 | Cost per AI decision | ~₹1.6–2.4 (Claude Sonnet 5.5, one call in most cases) |
