@@ -660,3 +660,31 @@ The paid AI column of the "before" baseline will be run from commit `3dc1cff` (e
 
 **Checked:** free-rules decision for Farhan #28 (full-price 0.78, 6.6× late): 10% off favourite handbag, win-back,
 immediate Rs 185 + retention Rs 1,109; drawer shows badge and split.
+
+## 2026-10-26: v2 Steps 4-6: variants, Hinglish, anchors, CSV import, learning mode, docs
+**Built:**
+- *Variants:* `propose_offer` takes 2-3 variants + chosen id + why; every variant must pass the message rules on the
+  final offer (a dishonest variant rejects the proposal); `variant_id` and all variants saved; drawer shows them.
+- *Hinglish:* `engine/voice.py`, `config/brand_voice.yaml` languages (Hindi → Hinglish), tones and Hinglish examples
+  in the prompt; Hinglish pressure phrases banned; Hinglish deadlines ("aaj raat", "aaj") must be true; fallback
+  templates have `message_hinglish`.
+- *Price anchors:* `rules.price_anchor` computes before/after from the catalog; only those numbers are allowed;
+  candidates and `estimate_profit` show the anchor.
+- *CSV import:* `data/import_csv.py` (customers, products with cost, order lines, optional campaigns; brand ids →
+  `id_map`; category map to the 5 rule categories; never overwrites a database). `docs/csv_import/`: mapping example,
+  50-customer sample brand, guide.
+- *Learning mode:* `engine/learning.py` + `meta` / `holdout_assignments` tables: no uplift model, formula × 0.7,
+  seeded 10% holdout skipped by the gatekeeper. Uplift model file is per database. Rules need caps only for
+  categories the shop sells.
+- *Win-back cap:* Rs 300 → Rs 500 per customer per month: at Rs 300 one 10% win-back on a typical VIP basket
+  (Rs 421) could never pass (found in the free simulation).
+- Docs: README (claim, "What this is and is not", v2 features), CLAUDE.md (v2 rules 4.6b, agent contract, harness,
+  data, scope, decision 11), reasoning.md 23-27, `docs/csv_import/README.md`.
+- Tests: `test_variants.py` (6), `test_import_csv.py` (6). **193 tests pass.**
+
+**Free simulation with the new rules (24 customers, 12 weeks):** send to all Rs 2,692 / full-price share 55%; send to
+all + rules Rs 1,076 / 59% (was Rs 2,046 / 56% before v2: habit protection blocks coupons for full-price customers
+who aren't late); free rules Rs 388 / 65%; no offers 65%. Honest reading: protecting habits costs 12-week profit in
+this referee (coupon training is mild) and keeps the full-price share higher.
+
+**Next:** paid runs (asked first): "before" = engine at commit `3dc1cff` on the same data; "after" = current engine.

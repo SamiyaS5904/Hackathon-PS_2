@@ -49,8 +49,13 @@ There is **no customer-facing UI**. Customers only receive Telegram messages.
 - **Grow repeat ordering and protect habits.** We want more customers ordering regularly. When someone's ordering
   habit breaks (they're late compared to their usual gap), win them back with a good offer, preferably on
   **their favourite item** (something they've ordered many times) or favourite category.
-- **Never lose profit on an offer (hard rule).** Send an offer only when it creates extra profit. Never send to
-  people who would buy anyway, never go beyond budget or margin limits, never spam.
+- **Never lose profit on an offer (hard rule).** Send an offer only when it creates extra value. Never send to
+  people who would buy anyway, never go beyond budget or margin limits, never spam. Since v2 (2026-10-26) value
+  includes what a won-back customer is worth over 12 weeks: **0 approved offers with negative total expected value
+  (immediate profit + retention value); the margin floor holds on every offer.** Normal offers still need the
+  minimum immediate profit; win-back offers may rely on retention value, inside their own smaller budget.
+- **Protect buying habits (v2).** Customers who mostly pay full price get no cash discounts unless it's a win-back;
+  coupons would teach them to wait for deals.
 
 Agent priorities, in order:
 1. **Habit break:** customer is overdue vs their usual order gap → offer on a favourite item/category
@@ -67,7 +72,8 @@ cost spent; didn't buy → a new decision (which can't wait again).
 
 ## 2. Pipeline
 ```
-[1 DATA]       data/generate.py → SQLite (3,000 customers, 12 months, 13 tables)
+[1 DATA]       data/generate.py → SQLite (3,000 customers, 12 months, 13 tables, discount training)
+[1c IMPORT]    data/import_csv.py → a real shop's CSV export into the same schema (learning mode without campaigns)
 [1b MODEL]     engine/uplift.py → uplift model trained on past campaigns (treatment vs holdout), no API
 [2 ANALYST]    engine/features.py → one profile per customer (habit, interest products, loyalty...)
 [3 TRIGGER]    engine/triggers.py detects moments (cart, product interest, habit break, points, wallet);
@@ -203,6 +209,17 @@ All values below are **starting values**.
 | No claims that aren't in the catalog data | ❌ reject |
 | Max 300 characters, no links | ❌ reject |
 
+### 4.6b Habit protection, retention value, win-back budget (v2, 2026-10-26; `habit`, `retention`, `winback` in rules.yaml)
+| Rule | Starting value | If broken |
+|---|---|---|
+| `habit_protection`: full-price share (12 months; no coupon, not a sale day) ≥ threshold → no pct_off / flat_off / cashback | 0.7 | ❌ reject, unless the customer is late (then only as a win-back offer) |
+| Retention value (late customers only: overdue ≥ 1.3×, ≥ 3 orders) | churn-avoidance share 0.4 × uplift × 12-week future margin | (part of the value rule) |
+| `profit.expected_profit` (normal offers) | immediate expected profit ≥ ₹20 | ❌ reject |
+| `profit.winback_value` (win-back offers: late customer AND relies on retention value or is a habit-protection exception) | immediate + retention ≥ ₹20 and immediate ≥ ₹0 | ❌ reject |
+| `budget.winback_daily` / `_monthly` / `_per_customer` | 30% of the daily budget / ₹30,000 / ₹500 (also counted in the normal budgets) | ❌ reject |
+The full-price share uses 12 months, not 90 days: in festival season a third of the days are sale days and even
+regular customers look deal-driven over 90 days (measured; `habit.share_window` can switch it).
+
 ### 4.7 How the checker answers
 - ✅ **approve:** send as is
 - 🔧 **repair:** a small, safe fix; logged as "repaired: what changed and why"
@@ -240,7 +257,13 @@ message always matches the offer; no fake urgency):
 - **Tools:** `get_customer_profile`, `get_recent_activity`, `get_offer_history`, `get_offer_limits`,
   `estimate_profit` (prices a list of up to 6 of the agent's own ideas in one call, with a rules check per idea),
   `propose_offer`, `propose_no_offer`, `propose_wait` (wait 1-48h, then a follow-up; not allowed in a follow-up).
-- **Voice:** premium, warm, lightly playful, English (`config/brand_voice.yaml`, editable by marketing).
+- **Voice:** premium, warm, lightly playful (`config/brand_voice.yaml`, editable by marketing). English, or
+  Hinglish for customers whose language is Hindi (v2; `languages.hinglish_for`).
+- **Message variants (v2):** `propose_offer` carries 2-3 variants (id, tone, text), the chosen id and why. Every
+  variant must pass the message rules on the final offer; `variant_id` and all variants are stored with the decision.
+  Price anchors ("₹799 → ₹719") only with the catalog's real before/after numbers (computed by code).
+- **Win-back and habit protection (v2):** candidates and `estimate_profit` show offer kind (normal / win-back),
+  retention value and total value; the numbers are code, the agent explains which kind it chose.
 - **Offer building blocks:** type (pct_off, flat_off, free_delivery, points_multiplier, cashback_to_wallet,
   early_access), amount, product/category, min order, expiry (2-48h), send time, message.
 - `get_customer_profile` includes habit signals (usual gap, overdue ratio, favourite items/categories) so the
@@ -267,11 +290,12 @@ message always matches the offer; no fake urgency):
 | 3 | `harness/test_adversarial.py` | Blocked: injection text in customer name/search query, 90% discount request, amount mismatch in message, fake urgency, unknown product, send at 2am, stacking | No | 100% |
 | 4 | `harness/test_fallback.py` | API down, timeout, junk output, 2 rejections, no key, daily limit → fallback used and still checked | No | 100% |
 | 5 | `harness/eval_agent_scenarios.py` | 16 golden scenarios (2 per persona) with expected sensible behaviour, e.g. loyal regular → nothing or zero-cost perk; about-to-leave VIP → comeback; buys-anyway → no discount. Also scores reasoning completeness | Yes | ≥ 14/16 |
-| 6 | `harness/simulate_profit.py` | agent+rules vs send-to-all vs fallback-only on a sample of customers, scored with hidden true responses | Yes (sample) | agent+rules > send-to-all, and > 0 |
+| 6 | `harness/simulate_profit.py` | agent+rules vs send-to-all vs fallback-only on a sample of customers, scored with hidden true responses: 48h and 12-week profit (seeded daily simulation with discount training and win-back revival), offers sent, full-price share | Yes (sample) | agent+rules > send-to-all, and > 0, on both 48h and 12-week |
 | 7 | `harness/test_rules_editing.py` | Editing a rule creates a new version, unsafe edits are refused, pending offers are re-checked, decisions record the version | No | 100% |
 
 | 8 | `harness/test_candidates.py`, `test_agentic.py`, `test_uplift.py`, `test_agent.py` | Candidate menu, own-idea pricing, triggers, honest deadlines, verified loyalty, wait + follow-ups, uplift model plumbing, agent loop | No | 100% |
 | 9 | `harness/eval_uplift.py` | Uplift model vs formula vs blend, scored against the hidden truth (reads `customer_traits`) | No | blend beats both |
+| 12 | `harness/test_truth_12w.py`, `test_variants.py`, `test_import_csv.py` | 12-week referee behaves as documented; variants / anchors / Hinglish checks; CSV import, graceful degradation, learning mode and holdout | No | 100% |
 | 10 | `harness/test_bot.py`, `test_api.py`, `test_guardrails_report.py` | Tester linking + delivery, every dashboard endpoint, Guardrails page numbers (layers per rule, budgets, breaker) | No | 100% |
 | 11 | `harness/eval_segments.py` | Testers page demo profiles (visible signals only) vs hidden personas | No | ≥ 70% (now 86%) |
 
@@ -296,6 +320,9 @@ treatment/holdout groups), `calendar`, plus pipeline tables `decisions` (incl. r
 Behaviour comes from the hidden traits (festival spikes, payday/weekend lift, category preferences, fading VIPs).
 Customers must have **repeat purchases of favourite items** and a **usual order gap**, and some customers' habits
 must break during the year, so habit-break offers have real data behind them. No phone numbers.
+v2: **discount training** (each coupon order raises a hidden wait-for-deal habit, halving every 45 days) and
+**win-back revival** (an offer-driven order revives a broken habit with chance 0.35), shared with the referee via
+`data/habits.py` / `config/habits.yaml`. Each customer's days use their own random stream.
 
 **Analyst signals for habits** (`engine/features.py`): usual order gap (median days between orders), days since
 last order, overdue ratio (days since last order ÷ usual gap), favourite items (ordered ≥ 3 times), favourite
@@ -357,7 +384,8 @@ The user must be able to open any Python file and understand what it does and wh
 - When a design decision changes, update **reasoning.md** so the "why" always matches the code.
 
 ## 13. Non-negotiable rules (summary)
-- Every approved offer: expected profit ≥ min and margin ≥ floor. No exceptions.
+- Every approved offer: margin ≥ floor and total expected value (immediate + retention) never negative. Normal
+  offers: immediate expected profit ≥ min. Win-back offers: late customer, total ≥ min, inside the win-back budget.
 - Every offer, from agent **or** fallback, passes `engine/rules.py` before reaching `bot/`.
 - Profit math is code (`engine/profit.py`), never the LLM.
 - Limits are read only through `get_active_rules()` (defaults in `config/rules.yaml`, edits from the Rules page
@@ -385,7 +413,7 @@ python -m harness.simulate_profit        # 3 per persona; refuses > 40 possible 
 
 ## 15. Scope
 Out of scope: customer UI (including feedback buttons on Telegram messages), mini shop/wallet for testers,
-bargaining, phone numbers, Telegram groups, Hinglish messages, extras.
+bargaining, phone numbers, Telegram groups, extras. (Hinglish messages moved into scope in v2, decision 11.)
 
 ---
 
@@ -405,4 +433,9 @@ bargaining, phone numbers, Telegram groups, Hinglish messages, extras.
 9. **More agentic + personal (2026-10-24):** interest-based offers (search / views / wishlist / cart), the AI
    prices its own ideas in one call, trigger detection, premium voice, honest deadlines, verified loyalty claims,
    and "wait first" decisions with follow-ups. Uplift model trained before the dashboard.
-10. **Brand voice:** premium, warm, lightly playful, English only. No feedback button on Telegram messages.
+10. **Brand voice:** premium, warm, lightly playful. English only until v2 (see 11). No feedback button on Telegram messages.
+11. **v2 (2026-10-26, approved plan):** long-term value (retention value, win-back offers with their own budget),
+    habit protection (no coupons for full-price buyers unless win-back), discount training + win-back revival in the
+    data and the referee, 12-week profit and full-price share in the simulation, 2-3 message variants with stored
+    variant id, Hinglish for Hindi-speaking customers, honest price anchors, CSV import with learning mode and a
+    10% holdout. Defaults chosen: full price = no coupon and not a sale day; win-back immediate floor ₹0.

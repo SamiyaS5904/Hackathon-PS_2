@@ -329,3 +329,40 @@ what was blocked before the AI could choose it, what the AI proposed that the ru
 how close the budgets and the circuit breaker are, and the latest harness proof (tests, AI scenarios, true profit).
 **How:** read-only (`engine/guardrails.py`), straight from the decisions table and the harness results files; it
 can never change a decision.
+
+## 23. Why retention value and win-back offers (v2)
+**Why:** judging every offer on one 48-hour order says a lapsing VIP who comes back is worth one basket. They're
+worth their next 12 weeks of orders. Without that, the maths under-rates exactly the offers the business cares about
+most (keep customers ordering).
+**How:** for late customers only, `retention_value = churn_avoidance_share × uplift × future margin` (orders a
+healthy habit brings in 12 weeks × normal margin per order). Offers that pass only thanks to it are *win-back
+offers*: separate budget (30% of daily, ₹30,000/month, ₹500/customer), immediate profit still ≥ ₹0, margin floor
+unchanged. The claim becomes "no approved offer has negative total expected value", which is honest about the bet.
+
+## 24. Why habit protection, and why a 12-month window
+**Why:** coupons can teach customers to wait for coupons. A customer who mostly pays full price is the healthiest
+kind; a cash discount buys today's order and can cost full-price orders later.
+**How:** if ≥ 70% of their orders were full price (no coupon, not a sale day), pct/flat/cashback are blocked unless
+it's a win-back; early access, points and free delivery stay. Measured choice: over 90 days, festival season (27 of
+90 days were sales) makes even regulars look deal-driven, so the rule uses 12 months, where loyal regulars, VIPs and
+points collectors (~0.8) separate cleanly from deal hunters (~0.56) and festival buyers (0).
+**Honest trade-off:** in our referee the coupon-training effect is mild, so blocking coupons for full-price
+customers gives up some 12-week profit in exchange for a higher full-price share. The simulation reports both, so
+the trade-off is visible, not hidden.
+
+## 25. Why the referee has discount training and win-back revival
+The referee (harness/truth.py) must be able to show long-term effects, otherwise retention and habit rules can't be
+judged at all. Both mechanisms are written down as assumptions (config/habits.yaml), shared with the data generator
+so the history is consistent, and never seen by the engine. Revival (35%) is a referee assumption; the engine's own
+estimate (churn_avoidance_share 0.4) is separate and has to be right on its own.
+
+## 26. Why message variants and honest anchors
+Different customers respond to different framings (price-first for deal seekers, warmth for a lapsing VIP, the exact
+product for a cart). The AI writes 2-3 and picks one; storing the variant id makes later reply-rate comparison
+possible. Every variant is checked, so no dishonest text is kept even unsent. A "₹799 → ₹719" anchor is persuasive
+and therefore dangerous: code computes it from the catalog and the checker allows only those numbers.
+
+## 27. Why a CSV importer and learning mode
+A model trained on our synthetic shop must never judge a real one. Without past campaigns the engine switches its
+model off, expects 30% less from every offer, and keeps a random 10% holdout so the shop can measure real lift and
+later train its own model. Missing data (browsing, carts, points) simply means those signals stay empty.

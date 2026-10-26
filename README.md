@@ -1,7 +1,8 @@
 # OfferPilot
 
-**An AI agent decides which offer each e-commerce customer gets, and when. Plain code makes sure the company never
-loses money on it.** Offers are delivered on Telegram; a company dashboard shows every decision and exactly why.
+**An AI agent decides which offer each e-commerce customer gets, and when. Plain code makes sure every offer is
+worth it, today and over the coming weeks, without teaching full-price customers to wait for coupons.** Offers are
+delivered on Telegram; a company dashboard shows every decision and exactly why.
 
 Built for a hackathon problem statement: years of customer data (orders, browsing, carts, wallet, reward points,
 past campaigns) → the right offer for the right person at the right moment, with hard limits the AI can't cross.
@@ -10,14 +11,26 @@ past campaigns) → the right offer for the right person at the right moment, wi
 
 | Check | Result |
 |---|---|
-| True profit, 24 customers across 8 hidden personas | **AI + rules ₹1,039** vs send-an-offer-to-everyone ₹827, free rules only ₹341 |
-| Offers sent | 20 of 24 (send-to-all: 24) — the AI also knows when to send nothing |
-| AI behaviour in 16 golden scenarios | 14/16 (pass bar 14), reasoning complete in all 16 |
-| Automatic tests | 168 pass: every rule, thousands of random offers (hypothesis), attacks, every AI failure path |
-| Approved offers that lose money | **0**: expected profit ≥ ₹20 and margin ≥ 10% on every approved offer, by construction |
+| True profit, 24 customers across 8 hidden personas | v2 (12-week + 48h) numbers: see [documentation.md](documentation.md) (latest "v2 results" entry) |
+| AI behaviour in 16 golden scenarios | v1: 14/16 (pass bar 14), reasoning complete in all 16 |
+| Automatic tests | 193 pass: every rule, thousands of random offers (hypothesis), attacks, every AI failure path, the CSV importer |
+| Approved offers with negative total expected value | **0** (total = immediate profit + retention value, by construction); the **10% margin floor holds on every offer**. Normal offers also need ≥ ₹20 immediate profit; win-back offers may rely on retention value, inside their own smaller budget |
 | Cost per AI decision | ~₹1.6–2.4 (Claude Sonnet 5.5, one call in most cases) |
 
 Full outputs: [docs/evidence/](docs/evidence/).
+
+## What this is and is not
+
+- **For:** small D2C brands (a few thousand to a few lakh customers) who send offers by hand or by simple rules
+  and want every offer to pay for itself, with the reasoning written down.
+- **How it differs from CleverTap / MoEngage-style tools:** those are excellent at *sending* (segments, journeys,
+  channels, A/B tests); the marketer still decides who gets what. OfferPilot decides the offer per customer, prices
+  it with profit maths (including what a won-back customer is worth over 12 weeks), and refuses anything that breaks
+  margin, budget, anti-spam, habit-protection or honesty rules. It could sit in front of such a tool.
+- **Limits, honestly:** the results come from **synthetic data** (3,000 customers, 12 months, a hidden "true
+  behaviour" we wrote ourselves); there is **no store**, so nobody actually redeems anything; the AI checks use small
+  samples (24 customers) because each AI decision costs money. The CSV importer makes it run on a real export, but it
+  has not been proven on one yet.
 
 ## How it decides
 
@@ -55,6 +68,18 @@ Key ideas:
   urgency or unbacked claims, the amount in the text must match the offer.
 - **Marketing edits the rules** on the dashboard; every save is a new version, unsafe values are refused, and offers
   not yet sent are re-checked.
+- **Long-term value (win-back):** for a customer whose habit is slipping, the value of an offer includes what they
+  are worth over the next 12 weeks if they come back (`retention_value`). Offers that rely on it are *win-back
+  offers*: shown with their own badge, inside a separate budget, margin floor unchanged.
+- **Habit protection:** customers who mostly pay full price get no cash discounts (only early access, bonus points or
+  free delivery) unless it's a win-back; coupons would teach them to wait for deals. The simulation measures the
+  full-price share of orders over 12 weeks for every approach.
+- **Message variants:** the AI writes 2-3 variants in different tones (and Hinglish for Hindi-speaking customers);
+  every variant is checked, the sent one is recorded so reply rates can be compared later. Price anchors
+  ("₹799 → ₹719") are allowed only with the catalog's real numbers.
+- **Real data:** `python -m data.import_csv` loads a brand's customers, products (with cost) and orders into a new
+  database; without past campaigns it runs in learning mode (no model, conservative estimates, a 10% holdout).
+  Guide: [docs/csv_import/README.md](docs/csv_import/README.md).
 
 Why each part works this way: [reasoning.md](reasoning.md). The full rulebook: [CLAUDE.md](CLAUDE.md).
 
@@ -77,10 +102,11 @@ python -u -m bot.telegram_bot                            # second terminal: Tele
 
 Tests:
 ```bash
-pytest harness/                          # 168 tests, no API, ~1 minute
+pytest harness/                          # 193 tests, no API, ~2 minutes
 python -m harness.eval_uplift            # free: uplift model vs formula vs blend, against the hidden truth
 python -m harness.eval_segments          # free: do the Testers page profiles match the hidden personas?
-python -m harness.simulate_profit        # real AI on 24 customers (saved answers make re-runs free)
+python -m harness.simulate_profit        # real AI on 24 customers, 48h + 12-week profit, full-price share
+python -m harness.simulate_profit --skip-ai   # free: the same without the AI column
 python -m harness.eval_agent_scenarios   # real AI, 16 golden scenarios
 ```
 
@@ -101,7 +127,7 @@ Real-tester guide: [TESTING.md](TESTING.md).
 
 | Folder | What's in it |
 |---|---|
-| `data/` | synthetic data generator (8 hidden personas, festivals, paydays, habits that break) |
+| `data/` | synthetic data generator (8 hidden personas, festivals, paydays, habits that break, discount training) and the CSV importer |
 | `engine/` | profile, triggers, candidate menu, profit, uplift model, gatekeeper, agent, rules, fallback, follow-ups |
 | `bot/` | Telegram bot, tester linking / re-linking, delivery |
 | `api/` | FastAPI for the dashboard (no decision logic of its own) |
@@ -109,6 +135,7 @@ Real-tester guide: [TESTING.md](TESTING.md).
 | `harness/` | tests and AI checks (the only code besides the generator that may read the hidden truth) |
 | `config/` | rules, offer types, message templates, brand voice |
 | `docs/evidence/` | saved outputs of real runs |
+| `docs/csv_import/` | column mapping example, sample brand export, import guide |
 
 Build log, step by step: [documentation.md](documentation.md).
 
