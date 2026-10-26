@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 
 from engine.catalog import Catalog
 from engine.clock import days_between, parse_ts, to_ist, to_ts
+from engine.learning import shop_mode
 
 HIGH_VALUE_SPEND_RUPEES = 20_000   # lifetime spend above this = high-value customer
 OPEN_CART_HOURS = 72               # an abandoned cart counts as "open" for 3 days
@@ -108,6 +109,8 @@ class CustomerProfile:
     # interest: products they searched for, viewed repeatedly, wishlisted or left in the cart (strongest first)
     intent_products: list[dict] = field(default_factory=list)
     is_loyal: bool = False        # enough orders to be called a loyal customer (rules: fairness.loyal_min_orders)
+    learning_mode: bool = False   # real shop without past campaigns: no uplift model, conservative formula
+    uplift_factor: float = 1.0    # conservative scaling of the formula in learning mode (engine/learning.py)
     as_of: str = ""               # the moment (UTC) this profile describes
 
     def to_dict(self) -> dict:
@@ -162,9 +165,12 @@ def build_profile(conn: sqlite3.Connection, customer_id: int, now: datetime, cat
     profile.intent_products = _intent_products(conn, customer_id, now, catalog, profile.open_cart)
     profile.is_loyal = profile.total_orders >= LOYAL_MIN_ORDERS
     profile.p_buy_48h_no_offer = estimate_p_buy_no_offer(profile)
+    mode = shop_mode(conn)
+    profile.learning_mode, profile.uplift_factor = mode["learning_mode"], mode["conservative_uplift_factor"]
     # If the uplift model has been trained, its "no offer" prediction replaces the hand-made formula
+    # (never in learning mode: a model trained on another shop must not judge this one)
     from engine.uplift import get_model  # imported here to avoid a circular import
-    model = get_model()
+    model = None if profile.learning_mode else get_model()
     if model:
         profile.p_buy_48h_no_offer = round(model.p_no_offer(profile), 3)
     return profile

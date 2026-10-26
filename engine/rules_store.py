@@ -189,8 +189,9 @@ def validate_rules(rules: dict, catalog: Catalog) -> list[str]:
     number(profit.get("free_delivery_min_order_rupees"), "Free delivery minimum order (Rs)", 0)
 
     caps = profit.get("category_cap_pct") or {}
-    if set(caps) != set(catalog.categories):
-        problems.append(f"Category caps must cover exactly these categories: {', '.join(catalog.categories)}.")
+    missing_caps = set(catalog.categories) - set(caps)
+    if missing_caps:   # an imported shop may sell only some categories: every category it sells needs a cap
+        problems.append(f"Category caps are missing for: {', '.join(sorted(missing_caps))}.")
     if isinstance(floor, (int, float)):
         for category, cap in caps.items():
             if category not in catalog.category_avg_margin_pct:

@@ -45,13 +45,15 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from config.settings import PROJECT_ROOT
+from config.settings import PROJECT_ROOT, settings
 from data.calendar_gen import festival_name_on, is_payday, is_weekend
 from engine.catalog import Catalog
 from engine.features import CustomerProfile, estimate_p_buy_no_offer
 from engine.models import OfferProposal
 
-MODEL_PATH = PROJECT_ROOT / "models" / "uplift.joblib"
+# One model per database: a real shop's model (trained on its own campaigns) never mixes with the demo model.
+_DB_STEM = Path(settings.db_path).stem
+MODEL_PATH = PROJECT_ROOT / "models" / ("uplift.joblib" if _DB_STEM == "offerpilot" else f"uplift_{_DB_STEM}.joblib")
 MODEL_OFFER_TYPES = ["pct_off", "flat_off", "free_delivery", "cashback_to_wallet", "points_multiplier", "early_access"]
 CATEGORIES = ["electronics", "fashion", "beauty", "home", "grocery"]
 PRODUCT_BOOST = {"favourite": 1.2, "cart": 1.5, "interest": 1.3}

@@ -138,6 +138,9 @@ def estimate_uplift(offer: OfferProposal, profile: CustomerProfile, catalog: Cat
     the two make different mistakes, so averaging cancels part of them. Otherwise the formula alone is used.
     """
     formula = formula_uplift(offer, profile, catalog)
+    if profile.learning_mode:
+        # Real shop, no past campaigns yet: no model, and expect less from every offer (fewer offers pass)
+        return round(formula * profile.uplift_factor, 3)
     from engine.uplift import get_model  # imported here to avoid a circular import
     model = get_model()
     if model:

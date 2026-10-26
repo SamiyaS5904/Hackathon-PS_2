@@ -241,6 +241,28 @@ CREATE TABLE IF NOT EXISTS rules_versions (
     is_active  INTEGER NOT NULL DEFAULT 0
 );
 
+-- Settings that belong to this database (e.g. learning mode for an imported real shop). Key/value text.
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Learning holdout (real shops without past campaigns): customers kept out of offers on purpose, so the shop can
+-- later measure what offers really add and train its own uplift model.
+CREATE TABLE IF NOT EXISTS holdout_assignments (
+    customer_id INTEGER PRIMARY KEY REFERENCES customers(id),
+    grp         TEXT NOT NULL,                -- 'holdout' (never offered) / 'eligible'
+    assigned_at TEXT NOT NULL
+);
+
+-- Imported shops: the brand's own ids (often text like "C-1042") mapped to our integer ids.
+CREATE TABLE IF NOT EXISTS id_map (
+    entity      TEXT NOT NULL,                -- 'customer' / 'product' / 'order'
+    external_id TEXT NOT NULL,
+    internal_id INTEGER NOT NULL,
+    PRIMARY KEY (entity, external_id)
+);
+
 -- "Plan your day": how many AI decisions are allowed on each date (API cost control).
 CREATE TABLE IF NOT EXISTS day_plans (
     date                  TEXT PRIMARY KEY,   -- YYYY-MM-DD (IST)

@@ -24,6 +24,7 @@ from datetime import datetime
 from config.settings import settings
 from engine.clock import ist_date, now_utc, start_of_ist_day, to_ts
 from engine.features import CustomerProfile
+from engine.learning import in_holdout
 from engine.rules import RuleState
 from engine.rules_store import ActiveRules
 
@@ -161,6 +162,9 @@ def screen(conn: sqlite3.Connection, profile: CustomerProfile, rules: ActiveRule
                                   f"(follow-up at {waiting[0]}).", priority)
     if state.active_offers >= rules.integrity["max_active_offers_per_customer"]:
         return GateResult("skip", "Customer already has an active offer.", priority)
+    if in_holdout(conn, profile.customer_id):
+        return GateResult("skip", "Learning holdout: kept out of offers on purpose, so the shop can measure what "
+                                  "offers really add (engine/learning.py).", priority)
     paused = circuit_breaker(conn, rules, state, now)
     if paused:
         return GateResult("skip", f"Circuit breaker: {paused}", priority)
