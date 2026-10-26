@@ -40,6 +40,7 @@ from engine.catalog import Catalog, load_catalog
 from engine.clock import now_utc, parse_ts, to_ist, to_ts
 from engine.fallback import fallback_decide
 from engine.features import CustomerProfile, build_profile
+from bot.manager import manager_chat
 from engine.gatekeeper import screen
 from engine.models import CheckResult, OfferProposal
 from engine.rules import check_offer, load_rule_state
@@ -77,7 +78,8 @@ class DecisionOutcome:
 
 def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manual",
            trigger_detail: dict | None = None, now: datetime | None = None, use_agent: bool = True,
-           dry_run: bool = False, catalog: Catalog | None = None, agent_client=None) -> DecisionOutcome:
+           dry_run: bool = False, catalog: Catalog | None = None, agent_client=None,
+           hold: bool = False) -> DecisionOutcome:
     """
     Make, explain and (unless dry_run) save one decision for one customer.
     `agent_client` lets tests plug in a fake AI; normally the real client is created only if a key exists.
@@ -86,6 +88,9 @@ def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manu
     catalog = catalog or load_catalog(conn)
     rules = get_active_rules(conn)
     profile = build_profile(conn, customer_id, now, catalog)
+    manager = manager_chat(conn)
+    if manager:  # manager mode: every approved offer goes to the manager's Telegram (bot/manager.py)
+        profile.telegram_linked = True
     state = load_rule_state(conn, customer_id, rules, now)
     gate = screen(conn, profile, rules, state, now, trigger_type, want_agent=use_agent,
                   agent_available=True if agent_client is not None else None)
@@ -130,6 +135,8 @@ def decide(conn: sqlite3.Connection, customer_id: int, trigger_type: str = "manu
     else:
         outcome = _fallback_outcome(profile, catalog, rules, state, now, trigger_type, gate.reason)
 
+    if hold and outcome.status in ("queued", "would_send"):
+        outcome.status = "review"   # a draft: the manager sends it from the dashboard (bot/manager.py approve)
     outcome.created_at = to_ts(now)
     if not dry_run:
         outcome.decision_id = _save(conn, outcome, trigger_detail)

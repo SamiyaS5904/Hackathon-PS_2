@@ -68,22 +68,28 @@ function PlanCard({ plan, onSaved }) {
 // Who gets which offer, when, through which channel, and what it should earn. Refreshes every 15 seconds.
 function Schedule({ onOpen }) {
   const [data, setData] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const load = () => api.outbox().then(setData).catch(() => {});
   useEffect(() => {
-    const load = () => api.outbox().then(setData).catch(() => {});
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 10000);
     return () => clearInterval(t);
   }, []);
+  const act = async (e, fn, id) => {   // Send / Discard a draft without opening the drawer
+    e.stopPropagation();
+    setBusyId(id);
+    try { await fn(id); } catch { /* the status in the list shows what happened */ } finally { setBusyId(null); load(); }
+  };
   if (!data) return <Card title="Offer schedule"><Spinner /></Card>;
   const t = data.totals;
   return (
     <Card title="Offer schedule: who gets what, when"
-          subtitle={`${t.offers} offers · ${t.on_telegram} on Telegram · expected profit ${inr(t.expected_profit_rupees)} · cost if all used ${inr(t.offer_cost_rupees)}`}>
-      {data.items.length === 0 ? <p className="text-sm text-muted">No offers yet. Open a customer and click "Send to … (AI)".</p> : (
+          subtitle={`${t.offers} offers · ${t.on_telegram} sent or on the way · drafts wait for your Send · expected profit ${inr(t.expected_profit_rupees)} · cost if all used ${inr(t.offer_cost_rupees)}`}>
+      {data.items.length === 0 ? <p className="text-sm text-muted">No offers yet. Open a customer and click "Make offer (AI)".</p> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="text-left text-xs text-muted">
-              <tr><th className="py-2 pr-3">When (IST)</th><th className="py-2 pr-3">Customer</th><th className="py-2 pr-3">Offer</th><th className="py-2 pr-3">Goes to</th><th className="py-2 pr-3">Status</th><th className="py-2 text-right">Exp. profit</th></tr>
+              <tr><th className="py-2 pr-3">When (IST)</th><th className="py-2 pr-3">Customer</th><th className="py-2 pr-3">Offer</th><th className="py-2 pr-3">Goes to</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3 text-right">Exp. profit</th><th className="py-2"></th></tr>
             </thead>
             <tbody className="tabular">
               {data.items.map((d) => (
@@ -93,7 +99,13 @@ function Schedule({ onOpen }) {
                   <td className="py-2 pr-3 text-ink2">{d.offer}{d.offer_kind === "winback" && <span className="ml-2 rounded-full border border-accent/50 px-2 py-0.5 text-[10px] text-[#86b6ef]">win-back</span>}</td>
                   <td className="whitespace-nowrap py-2 pr-3 text-ink2">{d.channel.startsWith("Telegram") && <Send size={12} className="mr-1 inline text-accent" />}{d.channel}</td>
                   <td className="py-2 pr-3"><StatusBadge status={d.status} /></td>
-                  <td className="py-2 text-right text-ink">{inr(d.expected_profit_rupees)}</td>
+                  <td className="py-2 pr-3 text-right text-ink">{inr(d.expected_profit_rupees)}</td>
+                  <td className="whitespace-nowrap py-2 text-right">
+                    {d.status === "review" && <>
+                      <Button className="px-2.5 py-1 text-xs" loading={busyId === d.id} onClick={(e) => act(e, api.sendDecision, d.id)}><Send size={12} /> Send</Button>
+                      <button className="ml-2 text-xs text-muted hover:text-ink" onClick={(e) => act(e, api.discardDecision, d.id)}>Discard</button>
+                    </>}
+                  </td>
                 </tr>
               ))}
             </tbody>

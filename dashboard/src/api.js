@@ -34,7 +34,10 @@ export const api = {
   customers: (search) => request(`/customers${query({ search, limit: 25 })}`),
   suggested: (refresh = false) => request(`/customers/suggested${refresh ? "?refresh=true" : ""}`),
   customer: (id) => request(`/customers/${id}`),
-  runAgent: (id, useAgent = true) => request(`/customers/${id}/run`, { method: "POST", body: { use_agent: useAgent } }),
+  runAgent: (id, useAgent = true, draft = false) =>
+    request(`/customers/${id}/run`, { method: "POST", body: { use_agent: useAgent, draft } }),
+  sendDecision: (id) => request(`/decisions/${id}/send`, { method: "POST" }),
+  discardDecision: (id) => request(`/decisions/${id}/discard`, { method: "POST" }),
   fireEvent: (id, body) => request(`/customers/${id}/events`, { method: "POST", body }),
   testers: () => request("/testers"),
   testerProfiles: () => request("/testers/profiles"),

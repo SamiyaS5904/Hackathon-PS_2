@@ -35,6 +35,8 @@ class Settings:
     claude_model: str
     max_agent_runs_per_day: int  # hard ceiling; the dashboard Day Plan can only go lower
     db_path: Path
+    telegram_manager_username: str = ""   # manager mode: every offer goes to this Telegram user (bot/manager.py)
+    api_url: str = "http://127.0.0.1:8010"  # the dashboard API, which the bot asks to run a decision
 
     @property
     def agent_enabled(self) -> bool:
@@ -55,6 +57,8 @@ def load_settings() -> Settings:
         claude_model=os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5").strip(),
         max_agent_runs_per_day=int(os.getenv("MAX_AGENT_RUNS_PER_DAY", "50")),
         db_path=db_path,
+        telegram_manager_username=os.getenv("TELEGRAM_MANAGER_USERNAME", "").strip().lstrip("@"),
+        api_url=os.getenv("OFFERPILOT_API_URL", "http://127.0.0.1:8010").strip().rstrip("/"),
     )
 
 

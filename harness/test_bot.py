@@ -158,3 +158,56 @@ def test_tick_decides_for_linked_testers_and_background_customers(db):
     result = tick(db, catalog, n_customers=10, ai_for="none", now=NOON_IST, seed=1)
     assert any(o.customer_id == c1 for o in result["decisions"])
     assert all(o.decided_by in ("fallback", "gatekeeper") for o in result["decisions"])  # no AI in tests
+
+
+# --- manager mode + dashboard drafts (bot/manager.py) ---------------------------------------------------
+def _manager_on(db, monkeypatch, username="boss"):
+    import dataclasses
+
+    import bot.manager
+    monkeypatch.setattr(bot.manager, "settings",
+                        dataclasses.replace(bot.manager.settings, telegram_manager_username=username))
+    t = add_tester(db, username, _two_customers(db)[0])
+    link_chat(db, t["token"], username, 777001)
+
+
+def test_manager_mode_sends_every_offer_to_the_manager_with_a_header(db, monkeypatch):
+    _manager_on(db, monkeypatch)
+    _, unlinked = _two_customers(db)
+    decision = _queue_decision(db, unlinked)
+    db.execute("UPDATE decisions SET final_offer = ? WHERE id = ?",
+               ('{"offer_type": "points_multiplier", "amount": 2, "expiry_hours": 48}', decision))
+    due = due_deliveries(db, NOON_IST)
+    assert [d["decision_id"] for d in due] == [decision] and due[0]["chat_id"] == 777001
+    assert f"customer #{unlinked}" in due[0]["text"] and "Hi! 2x points for you." in due[0]["text"]
+
+
+def test_draft_is_not_sent_until_the_manager_clicks_send(db, monkeypatch):
+    from bot.manager import approve, discard
+    _manager_on(db, monkeypatch)
+    _, customer = _two_customers(db)
+    draft = _queue_decision(db, customer, status="review")
+    assert due_deliveries(db, NOON_IST) == []                      # a draft never goes out by itself
+    assert approve(db, draft, NOON_IST) == "queued"
+    assert [d["decision_id"] for d in due_deliveries(db, NOON_IST)] == [draft]
+    other = _queue_decision(db, customer, status="review")
+    assert discard(db, other) and db.execute("SELECT status FROM decisions WHERE id = ?", (other,)).fetchone()[0] == "cancelled"
+    assert approve(db, other, NOON_IST) is None                    # a discarded draft can't be sent
+
+
+def test_draft_sent_during_quiet_hours_waits(db, monkeypatch):
+    from bot.manager import approve
+    _manager_on(db, monkeypatch)
+    _, customer = _two_customers(db)
+    later = (NOON_IST + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    draft = _queue_decision(db, customer, status="review", send_at=later)
+    assert approve(db, draft, NOON_IST) == "scheduled"
+
+
+def test_decide_can_hold_an_offer_as_a_draft(db):
+    from engine.decide import decide
+    customer = db.execute("SELECT id FROM customers WHERE marketing_consent = 1 LIMIT 1").fetchone()[0]
+    out = decide(db, customer, now=NOON_IST, use_agent=False, hold=True)
+    assert out.status in ("review", "nothing")                      # an approved offer becomes a draft
+    if out.offer is not None:
+        assert out.status == "review"

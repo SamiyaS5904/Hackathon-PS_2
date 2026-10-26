@@ -36,7 +36,8 @@ from engine.learning import shop_mode
 HIGH_VALUE_SPEND_RUPEES = 20_000   # lifetime spend above this = high-value customer
 OPEN_CART_HOURS = 72               # an abandoned cart counts as "open" for 3 days
 FAVOURITE_MIN_ORDERS = 3           # ordered 3+ times = favourite item
-SENT_STATUSES = ("sent", "queued", "scheduled", "would_send")  # decisions that count as "an offer went out"
+# decisions that count as "an offer went out" (incl. ones waiting for the manager's OK on Telegram)
+SENT_STATUSES = ("sent", "queued", "scheduled", "would_send", "review", "in_review")
 LOYAL_MIN_ORDERS = 5               # same as config/rules.yaml fairness.loyal_min_orders (default); used for the label
 
 

@@ -39,6 +39,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from bot.manager import approve, discard, manager_chat
 from bot.testers import add_tester, list_testers, relink_tester
 from config.settings import PROJECT_ROOT, settings
 from db.store import connect
@@ -275,15 +276,17 @@ def outbox(limit: int = 40) -> dict:
         JOIN customers c ON c.id = d.customer_id
         LEFT JOIN testers t ON t.customer_id = d.customer_id
         WHERE d.final_offer IS NOT NULL
-          AND d.status IN ('queued', 'scheduled', 'sent', 'would_send', 'expired', 'cancelled')
+          AND d.status IN ('review', 'queued', 'scheduled', 'sent', 'would_send', 'expired', 'cancelled')
         ORDER BY COALESCE(d.sent_at, d.send_at, d.created_at) DESC LIMIT ?""", (limit,)).fetchall()
     items = []
+    manager = manager_chat(conn)
     for r in rows:
         linked = r["telegram_chat_id"] is not None and r["telegram_username"]
-        items.append({**_decision_row(r),
-                      "goes_at": r["sent_at"] or r["send_at"] or r["created_at"],
-                      "channel": f"Telegram @{r['telegram_username']}" if linked else "Not linked (would send)"})
-    live = [i for i in items if i["status"] in ("queued", "scheduled", "sent", "would_send")]
+        channel = (f"Telegram @{manager[0]}" if manager else
+                   f"Telegram @{r['telegram_username']}" if linked else "Not linked (would send)")
+        items.append({**_decision_row(r), "goes_at": r["sent_at"] or r["send_at"] or r["created_at"],
+                      "channel": channel})
+    live = [i for i in items if i["status"] in ("queued", "scheduled", "sent", "would_send", "review")]
     return {"items": items,
             "totals": {"offers": len(live),
                        "on_telegram": sum(1 for i in live if i["status"] in ("queued", "scheduled", "sent")),
@@ -380,13 +383,14 @@ def customer(customer_id: int) -> dict:
                       "suggested_delay_hours": t.suggested_delay_hours} for t in detect_triggers(p)],
         "orders": orders,
         "decisions": decisions(limit=10, customer_id=customer_id),
-        "tester": tester[0] if tester else None,
+        "tester": (manager_chat(conn) or tester or (None,))[0],
     }
 
 
 class RunIn(BaseModel):
     use_agent: bool = True
     trigger: str = "auto"   # 'auto' = strongest detected trigger, else 'manual'
+    draft: bool = False     # True = save an approved offer as a draft; the manager clicks Send to release it
 
 
 @app.post("/api/customers/{customer_id}/run")
@@ -399,8 +403,27 @@ def run_agent(customer_id: int, body: RunIn) -> dict:
         found = detect_triggers(build_profile(conn, customer_id, now, catalog))
         if found:
             trigger, detail = found[0].type, found[0].detail
-    outcome = decide(conn, customer_id, trigger, detail, now=now, use_agent=body.use_agent, catalog=catalog)
+    outcome = decide(conn, customer_id, trigger, detail, now=now, use_agent=body.use_agent, catalog=catalog,
+                     hold=body.draft)
     return _decision_detail(conn, outcome.decision_id)
+
+
+@app.post("/api/decisions/{decision_id}/send")
+def send_decision(decision_id: int) -> dict:
+    """The manager's Send button: release a draft; the bot delivers it within ~15 s (after quiet hours if needed)."""
+    conn = db()
+    if approve(conn, decision_id, now_utc()) is None:
+        raise HTTPException(400, "Only a draft offer can be sent (it may already be sent or discarded).")
+    return _decision_detail(conn, decision_id)
+
+
+@app.post("/api/decisions/{decision_id}/discard")
+def discard_decision(decision_id: int) -> dict:
+    """The manager's Discard button: cancel a draft before it is sent."""
+    conn = db()
+    if not discard(conn, decision_id):
+        raise HTTPException(400, "Only a draft offer can be discarded.")
+    return _decision_detail(conn, decision_id)
 
 
 class EventIn(BaseModel):

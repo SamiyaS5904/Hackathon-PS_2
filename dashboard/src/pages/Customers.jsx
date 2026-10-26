@@ -18,10 +18,11 @@ function Fact({ label, value }) {
 }
 
 // What just happened, in one line the manager can read during a demo: offer, profit, where it goes, status.
-function SendResult({ d, onOpen }) {
+function SendResult({ d, onOpen, onSend, onDiscard, busy }) {
   const sent = d.status === "sent";
+  const draft = d.status === "review";
   const onItsWay = d.status === "queued" || d.status === "scheduled";
-  const tone = sent ? "border-good/40 bg-good/10" : onItsWay ? "border-accent/40 bg-accent/10" : "border-hairline bg-raised/40";
+  const tone = sent ? "border-good/40 bg-good/10" : onItsWay || draft ? "border-accent/40 bg-accent/10" : "border-hairline bg-raised/40";
   return (
     <div className={`mt-4 rounded-xl border p-4 text-sm ${tone}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -29,15 +30,21 @@ function SendResult({ d, onOpen }) {
         <StatusBadge status={d.status} />
       </div>
       <div className="mt-1.5 text-xs text-ink2">
+        {draft && <>Ready. Check the message below, then send it or discard it.</>}
         {sent && <>Delivered to Telegram at {ist(d.sent_at)}.</>}
         {d.status === "queued" && <>On its way: the bot sends it within about 15 seconds…</>}
         {d.status === "scheduled" && <>Scheduled for {ist(d.send_at)} IST (quiet hours end).</>}
-        {d.status === "would_send" && <>Not sent: no Telegram is linked to this customer. Use "Send to …" to send it to yours.</>}
+        {d.status === "would_send" && <>Not sent: no Telegram is linked (link yours on the Testers page).</>}
+        {d.status === "cancelled" && <>Discarded. Nothing was sent.</>}
         {["nothing", "waiting", "blocked"].includes(d.status) && <>{d.summary}</>}
         {d.expected_profit_rupees != null && <> Expected profit {inr(d.expected_profit_rupees)}, offer cost {inr(d.offer_cost_rupees)}.</>}
       </div>
       {d.message && <div className="mt-2 rounded-lg bg-[#1c3556] px-3 py-2 text-xs text-ink">{d.message}</div>}
-      <button onClick={onOpen} className="mt-2 text-xs text-[#86b6ef] hover:underline">See why (full reasoning)</button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {draft && <Button onClick={onSend} loading={busy}><Send size={14} /> Send to Telegram</Button>}
+        {draft && <Button variant="secondary" onClick={onDiscard} disabled={busy}>Discard</Button>}
+        <button onClick={onOpen} className="text-xs text-[#86b6ef] hover:underline">See why (full reasoning)</button>
+      </div>
     </div>
   );
 }
@@ -71,10 +78,7 @@ function Profile({ id, onDecision }) {
       const decision = res.decision ?? res;
       if (res.event) setLastEvent(res.event);
       await load();
-      if (decision?.id) {
-        setResult(await api.decision(decision.id));
-        onDecision(decision.id);
-      }
+      if (decision?.id) setResult(await api.decision(decision.id));   // shown in the box below, with Send
     } catch (e) {
       setError(e);
     } finally {
@@ -84,11 +88,10 @@ function Profile({ id, onDecision }) {
 
   if (!data) return error ? <ErrorBox error={error} /> : <Spinner />;
   const p = data.profile;
-  const me = testers.find((t) => t.linked);                    // a linked Telegram tester (e.g. you)
-  const sendHere = async () => {                               // one click: point my Telegram at this customer, then decide
-    await api.relink(me.username, id);
-    api.testers().then(setTesters).catch(() => {});
-    return api.runAgent(id, true);
+  const sendDraft = async (fn) => {                            // Send / Discard on the draft shown below
+    setBusy("send");
+    setError(null);
+    try { setResult(await fn(result.id)); await load(); } catch (e) { setError(e); } finally { setBusy(null); }
   };
 
   return (
@@ -105,22 +108,19 @@ function Profile({ id, onDecision }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {me && data.tester !== me.username && (
-              <Button onClick={() => act("tg", sendHere)} loading={busy === "tg"}><Send size={15} /> Send to @{me.username} (AI)</Button>
-            )}
-            <Button variant={me && data.tester !== me.username ? "secondary" : "primary"} onClick={() => act("ai", () => api.runAgent(id, true))} loading={busy === "ai"}><Bot size={15} /> Run AI agent</Button>
-            <Button variant="secondary" onClick={() => act("rules", () => api.runAgent(id, false))} loading={busy === "rules"}>Free rules only</Button>
+            <Button onClick={() => act("ai", () => api.runAgent(id, true, true))} loading={busy === "ai"}><Bot size={15} /> Make offer (AI)</Button>
+            <Button variant="secondary" onClick={() => act("rules", () => api.runAgent(id, false, true))} loading={busy === "rules"}>Make offer (free rules)</Button>
           </div>
         </div>
         <p className="mt-3 text-xs text-muted">
-          There is no separate Send button: after the rules approve an offer,{" "}
-          {data.tester
-            ? <>the bot sends it to <span className="text-ink2">@{data.tester}</span> on Telegram within about 15 seconds (status turns to "Sent on Telegram").</>
-            : <>it is saved as "Would send", because no tester is linked to this customer (link one on the Testers page).</>}
-          {" "}Offers decided during quiet hours (22:00–08:00) are sent at 08:00.
+          "Make offer" lets the AI (or the free rules) decide and the rules check it. Nothing is sent until you click
+          {" "}<span className="text-ink2">Send to Telegram</span>
+          {data.tester ? <>: it then goes to <span className="text-ink2">@{data.tester}</span> within about 15 seconds.</> : <> (no Telegram is linked yet: link one on the Testers page).</>}
+          {" "}During quiet hours (22:00–08:00) a sent offer waits until 08:00.
         </p>
         <div className="mt-4"><ErrorBox error={error} /></div>
-        {result && <SendResult d={result} onOpen={() => onDecision(result.id)} />}
+        {result && <SendResult d={result} onOpen={() => onDecision(result.id)} busy={busy === "send"}
+                               onSend={() => sendDraft(api.sendDecision)} onDiscard={() => sendDraft(api.discardDecision)} />}
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <Fact label="Usual order gap" value={p.usual_gap_days ? `every ${p.usual_gap_days} days` : "–"} />

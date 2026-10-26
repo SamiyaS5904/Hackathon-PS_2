@@ -18,6 +18,7 @@ export const ist = (ts, withDate = true) =>
 
 export const STATUS = {
   sent: { label: "Sent on Telegram", tone: "good" },
+  review: { label: "Draft: not sent yet", tone: "warning" },
   queued: { label: "Queued for Telegram", tone: "accent" },
   scheduled: { label: "Scheduled", tone: "accent" },
   would_send: { label: "Would send", tone: "neutral" },

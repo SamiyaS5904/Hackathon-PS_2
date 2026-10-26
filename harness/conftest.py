@@ -36,9 +36,12 @@ def no_real_api_key(monkeypatch):
     import engine.agent
     import engine.gatekeeper
 
-    no_key = dataclasses.replace(engine.gatekeeper.settings, anthropic_api_key="")
+    import bot.manager
+
+    no_key = dataclasses.replace(engine.gatekeeper.settings, anthropic_api_key="", telegram_manager_username="")
     monkeypatch.setattr(engine.gatekeeper, "settings", no_key)
     monkeypatch.setattr(engine.agent, "settings", no_key)
+    monkeypatch.setattr(bot.manager, "settings", no_key)   # manager mode off unless a test switches it on
 
 
 @pytest.fixture(autouse=True)
