@@ -12,11 +12,13 @@ uvicorn>=0.29
 pydantic>=2.6
 PyYAML>=6.0
 python-dotenv>=1.0
-numpy>=1.26
+numpy==1.26.4          # pinned: the trained model file must load with the same versions
 pandas>=2.2
 
 # Uplift model (Day 2)
-scikit-learn>=1.4
+scikit-learn==1.8.0    # pinned (see numpy)
+scipy==1.17.1
+joblib==1.5.3
 
 # Harness
 pytest>=8.0

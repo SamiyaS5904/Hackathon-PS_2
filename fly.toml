@@ -3,7 +3,7 @@
 # Never scale above 1 machine: two copies of the bots would fight over the same Telegram tokens.
 
 app = "offerpilot-samiya"        # change it if the name is taken (fly will tell you)
-primary_region = "bom"           # Mumbai
+primary_region = "sin"           # Singapore (closest region to India on Fly)
 
 [env]
   DB_PATH = "/data/offerpilot.db"

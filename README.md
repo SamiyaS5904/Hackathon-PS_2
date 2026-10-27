@@ -167,18 +167,20 @@ python -m harness.eval_agent_scenarios   # real AI, 16 golden scenarios
 **Option 1: this laptop (fine for a demo).** Double-click `start_offerpilot.bat`. Keep both windows open: offers only
 go out while they run, and the laptop must not sleep. After editing `.env`, close both windows and start again.
 
+**Live now: https://offerpilot-samiya.fly.dev** (login: any username + the dashboard password).
+
 **Option 2: always on, with Fly.io (ready: `Dockerfile`, `fly.toml`, `deploy/start.sh`).** One small machine in
-Mumbai runs the dashboard + autopilot and all six bots; the database lives on a persistent volume. About $3-5 a month.
+Singapore (Fly has no Mumbai region) runs the dashboard + autopilot and all six bots; the database lives on a persistent volume. About $3-5 a month.
 Run in PowerShell from the project folder (install flyctl first if needed: `iwr https://fly.io/install.ps1 -useb | iex`):
 ```powershell
 fly auth login                                                          # once
 fly apps create offerpilot-samiya                                       # pick another name if taken (also in fly.toml)
-fly volumes create offerpilot_data --region bom --size 1 -a offerpilot-samiya
+fly volumes create offerpilot_data --region sin --size 1 -a offerpilot-samiya
 # secrets from .env (everything except DB_PATH and empty values), plus a dashboard password:
 (Get-Content .env) | Where-Object { $_ -match '^[A-Z_]+=.+' -and $_ -notmatch '^DB_PATH=' } | fly secrets import -a offerpilot-samiya
 fly secrets set DASHBOARD_PASSWORD=choose-a-strong-password -a offerpilot-samiya
 # IMPORTANT: close the laptop's "Telegram bots" window first: only one copy of the bots may run
-fly deploy                                                              # builds and starts it (first time ~5 min)
+fly deploy --ha=false                                                   # ONE machine; builds and starts it (~5 min)
 fly open                                                                # https://offerpilot-samiya.fly.dev (login: any name + your password)
 fly logs                                                                # live logs: offers decided, bots sending
 ```

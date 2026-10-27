@@ -171,7 +171,11 @@ def get_model() -> UpliftModel | None:
     """The trained model, or None if it hasn't been trained yet (then the heuristics are used)."""
     if os.getenv("USE_UPLIFT_MODEL", "1") == "0" or not MODEL_PATH.exists():
         return None
-    data = joblib.load(MODEL_PATH)
+    try:
+        data = joblib.load(MODEL_PATH)
+    except Exception as exc:  # noqa: BLE001 - e.g. saved with another scikit-learn version: fall back, never crash
+        print(f"Uplift model could not be loaded ({exc}); using the hand-made formula instead.")
+        return None
     return UpliftModel(data["control"], data["treated"], data["info"])
 
 
