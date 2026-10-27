@@ -70,7 +70,8 @@ export default function Autopilot() {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState(null);
   const [busy, setBusy] = useState(null);
-  const [openId, setOpenId] = useState(null);
+  // ?decision=<id> in the link opens that decision's reasoning directly (shareable, and used for screenshots)
+  const [openId, setOpenId] = useState(() => Number(new URLSearchParams(window.location.search).get("decision")) || null);
 
   const load = () => api.autopilot().then(setData).catch(setError);
   useEffect(() => {
