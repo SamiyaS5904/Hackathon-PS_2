@@ -59,6 +59,8 @@ Full outputs: [docs/evidence/](docs/evidence/).
 - **Demo mode (manager mode):** every message goes to one Telegram account (`TELEGRAM_MANAGER_USERNAME` in `.env`),
   exactly as the customer would see it. Who it was for and why is on the dashboard. Leave the setting empty to send
   each offer to the tester linked to that customer instead.
+- **Public showcase group:** every sent offer is also posted, by the same bot, in the Telegram group
+  *OfferPilot Live Offers* (https://t.me/+LyvVlulkewU4Yjg1), so anyone can watch the six bots working.
 - **Dashboard home = Autopilot:** one card per bot (sent / planned, expected profit, next send), then today's offers
   in time order: customer, group, reason, offer, the exact Telegram message, why, and the money. Click any offer for
   the AI's full reasoning and every rule check.
@@ -142,6 +144,8 @@ python -u -m bot.telegram_bot                            # the Telegram bots
 | `TELEGRAM_BOT_TOKEN_ELECTRONICS` … `_GROCERY` | One token per category bot from @BotFather. Empty = that category uses the main bot. |
 | `TELEGRAM_MANAGER_USERNAME` | Demo mode: every offer goes to this Telegram user. |
 | `MAX_AGENT_RUNS_PER_DAY` | Hard ceiling on AI decisions per day (default 50, about ₹100). |
+| `DASHBOARD_PASSWORD` | Login for the dashboard. **Always set it when the dashboard is on the internet.** |
+| `TELEGRAM_GROUP_CHAT_ID` | Optional: the public showcase group. Normally detected by itself when the bots are added to a group. |
 
 Each bot can only message someone who has pressed **Start** in it once, so open every bot in Telegram and press Start.
 
@@ -163,40 +167,27 @@ python -m harness.eval_agent_scenarios   # real AI, 16 golden scenarios
 **Option 1: this laptop (fine for a demo).** Double-click `start_offerpilot.bat`. Keep both windows open: offers only
 go out while they run, and the laptop must not sleep. After editing `.env`, close both windows and start again.
 
-**Option 2: always on, on a small Linux cloud server** (for example a ₹500-800/month VM on AWS Lightsail,
-DigitalOcean or Azure; Ubuntu 22.04+, 1 GB RAM is enough).
-1. Get the code and the files that are deliberately not in git (secrets, data, model):
-   ```bash
-   git clone https://github.com/SamiyaS5904/Hackathon-PS_2.git offerpilot && cd offerpilot
-   # from your laptop: scp .env data/offerpilot.db models/uplift.joblib  user@server:offerpilot/  (into the same folders)
-   ```
-2. Install and build once:
-   ```bash
-   sudo apt update && sudo apt install -y python3-venv nodejs npm
-   python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-   cd dashboard && npm install && npm run build && cd ..
-   ```
-3. Run both programs as services so they survive reboots. Create `/etc/systemd/system/offerpilot-api.service`:
-   ```ini
-   [Unit]
-   Description=OfferPilot dashboard + API + autopilot
-   After=network-online.target
+**Option 2: always on, with Fly.io (ready: `Dockerfile`, `fly.toml`, `deploy/start.sh`).** One small machine in
+Mumbai runs the dashboard + autopilot and all six bots; the database lives on a persistent volume. About $3-5 a month.
+Run in PowerShell from the project folder (install flyctl first if needed: `iwr https://fly.io/install.ps1 -useb | iex`):
+```powershell
+fly auth login                                                          # once
+fly apps create offerpilot-samiya                                       # pick another name if taken (also in fly.toml)
+fly volumes create offerpilot_data --region bom --size 1 -a offerpilot-samiya
+# secrets from .env (everything except DB_PATH and empty values), plus a dashboard password:
+(Get-Content .env) | Where-Object { $_ -match '^[A-Z_]+=.+' -and $_ -notmatch '^DB_PATH=' } | fly secrets import -a offerpilot-samiya
+fly secrets set DASHBOARD_PASSWORD=choose-a-strong-password -a offerpilot-samiya
+# IMPORTANT: close the laptop's "Telegram bots" window first: only one copy of the bots may run
+fly deploy                                                              # builds and starts it (first time ~5 min)
+fly open                                                                # https://offerpilot-samiya.fly.dev (login: any name + your password)
+fly logs                                                                # live logs: offers decided, bots sending
+```
+The first start copies `data/offerpilot.db` (uploaded with the build) onto the volume; later deploys keep the live
+data. Keep it at **one machine** (never `fly scale count 2`). To stop it: `fly scale count 0`.
 
-   [Service]
-   WorkingDirectory=/home/ubuntu/offerpilot
-   ExecStart=/home/ubuntu/offerpilot/.venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8010
-   Restart=always
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-   and `offerpilot-bot.service` the same way with `ExecStart=.../.venv/bin/python -u -m bot.telegram_bot`. Then:
-   ```bash
-   sudo systemctl daemon-reload && sudo systemctl enable --now offerpilot-api offerpilot-bot
-   ```
-4. **Put a login in front of the dashboard before making it public**: it can send real messages and spend API money.
-   The simplest is Nginx with basic auth (`proxy_pass http://127.0.0.1:8010;` + `auth_basic`), or Cloudflare Tunnel +
-   Cloudflare Access. Never open port 8010 to the internet without one.
+**Option 3: any Linux server (VM).** Clone the repo, copy `.env`, `data/offerpilot.db` and `models/uplift.joblib`,
+`pip install -r requirements.txt`, build the dashboard, and run `bash deploy/start.sh` as a systemd service, with a
+login in front of port 8080.
 
 Telegram needs no webhook or public address: the bots poll Telegram, so they work from any machine with internet.
 Run only **one** copy of the bot at a time (two copies polling the same token conflict).

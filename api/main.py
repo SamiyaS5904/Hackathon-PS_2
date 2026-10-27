@@ -23,9 +23,11 @@ The Claude API key is never used here directly: only engine/agent.py uses it, vi
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
+import secrets
 import sqlite3
 import time
 from contextlib import asynccontextmanager
@@ -33,7 +35,7 @@ from functools import lru_cache
 from collections import defaultdict
 from datetime import timedelta
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -109,6 +111,27 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="OfferPilot API", version="1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def require_password(request: Request, call_next):
+    """
+    When DASHBOARD_PASSWORD is set (always, once deployed), the browser asks for a login before showing anything:
+    the dashboard can send real Telegram messages and spend API money. Any username, this password. Health checks
+    stay open so the hosting platform can see the app is alive. Not set = open (fine on your own laptop).
+    """
+    password = settings.dashboard_password
+    if not password or request.url.path == "/api/health":
+        return await call_next(request)
+    header = request.headers.get("authorization", "")
+    if header.startswith("Basic "):
+        try:
+            _, _, given = base64.b64decode(header[6:]).decode("utf-8").partition(":")
+        except (ValueError, UnicodeDecodeError):
+            given = ""
+        if secrets.compare_digest(given, password):
+            return await call_next(request)
+    return Response("Login required", status_code=401, headers={"WWW-Authenticate": 'Basic realm="OfferPilot"'})
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["*"], allow_headers=["*"])
 

@@ -1,0 +1,16 @@
+# Keep the image small; secrets go in via `fly secrets`, never in the image.
+.env
+.git
+**/node_modules
+dashboard/dist
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.hypothesis
+harness/recordings
+harness/results
+data/offerpilot_v1_backup.db
+data/*.db-journal
+docs/evidence
+.claude
+.vscode

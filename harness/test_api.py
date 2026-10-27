@@ -99,3 +99,15 @@ def test_tester_profiles_are_grouped_and_offer_ready(client):
     picks = [c for s in segments for c in s["customers"]]
     assert len({c["id"] for c in picks}) == len(picks)  # a customer is in one segment only
     assert not linked & {c["id"] for c in picks}       # never a customer already played by a tester
+
+
+def test_dashboard_password_is_enforced_when_set(client, monkeypatch):
+    import base64
+    import dataclasses
+    monkeypatch.setattr(api.main, "settings", dataclasses.replace(api.main.settings, dashboard_password="s3cret"))
+    assert client.get("/api/health").status_code == 200                      # health check stays open
+    assert client.get("/api/overview").status_code == 401
+    bad = base64.b64encode(b"admin:wrong").decode()
+    assert client.get("/api/overview", headers={"Authorization": f"Basic {bad}"}).status_code == 401
+    good = base64.b64encode(b"admin:s3cret").decode()
+    assert client.get("/api/overview", headers={"Authorization": f"Basic {good}"}).status_code == 200

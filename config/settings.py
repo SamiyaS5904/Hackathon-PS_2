@@ -38,6 +38,7 @@ class Settings:
     telegram_manager_username: str = ""   # manager mode: every offer goes to this Telegram user (bot/manager.py)
     api_url: str = "http://127.0.0.1:8010"  # the dashboard API, which the bot asks to run a decision
     telegram_group_chat_id: str = ""        # public showcase group (bot/manager.py group_chat); empty = auto-detect
+    dashboard_password: str = ""            # set it whenever the dashboard is reachable from the internet
 
     @property
     def agent_enabled(self) -> bool:
@@ -61,6 +62,7 @@ def load_settings() -> Settings:
         telegram_manager_username=os.getenv("TELEGRAM_MANAGER_USERNAME", "").strip().lstrip("@"),
         api_url=os.getenv("OFFERPILOT_API_URL", "http://127.0.0.1:8010").strip().rstrip("/"),
         telegram_group_chat_id=os.getenv("TELEGRAM_GROUP_CHAT_ID", "").strip(),
+        dashboard_password=os.getenv("DASHBOARD_PASSWORD", "").strip(),
     )
 
 
