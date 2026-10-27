@@ -39,7 +39,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from bot.bots import bot_key_for, bots_status
+from bot.bots import bot_key_for, bot_token, bots_status
 from bot.manager import approve, discard, manager_chat
 from bot.testers import add_tester, list_testers, relink_tester
 from config.settings import PROJECT_ROOT, settings
@@ -310,8 +310,14 @@ def autopilot() -> dict:
             "expected_profit_rupees": r["expected_profit_paise"] // 100 if r["expected_profit_paise"] is not None else None,
             "offer_cost_rupees": r["offer_cost_paise"] // 100 if r["offer_cost_paise"] is not None else None,
         })
+    started = {r[0].removeprefix("bot_started_") for r in conn.execute(
+        "SELECT key FROM meta WHERE key LIKE 'bot_started_%'")} if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE name = 'meta'").fetchone() else set()
+    main_token = settings.telegram_bot_token
     cards = []
     for key, info in status.items():
+        # ready = its own token works AND the manager pressed Start in it (the Rewards bot is the main bot: always ready)
+        info = {**info, "ready": bool(info["connected"]) and (key in started or bot_token(key) == main_token)}
         mine = [x for x in rows if x["bot"] == key]
         upcoming = [x for x in rows if x["planned_bot"] == key and x["slot_status"] == "planned"]
         cards.append({**info,

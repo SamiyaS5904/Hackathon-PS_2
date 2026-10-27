@@ -21,7 +21,7 @@ from telegram import Bot, Update
 from telegram.error import TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, TypeHandler
 
-from bot.bots import bot_token
+from bot.bots import bot_config, bot_token
 from bot.delivery import due_deliveries, mark_failed, mark_sent
 from bot.testers import link_chat
 from config.settings import settings
@@ -104,6 +104,43 @@ async def deliver(context: ContextTypes.DEFAULT_TYPE) -> None:
         conn.close()
 
 
+_offsets: dict[str, int] = {}
+
+
+async def greet_category_starts(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Every few seconds: read new messages sent to the category bots (they have no handlers of their own) and answer
+    each one, so pressing Start shows "connected" instead of silence. Also remembers that the bot is ready to message
+    that person (meta 'bot_started_<key>'), which the dashboard shows. The Rewards bot is the main bot: its /start
+    is handled by start() above.
+    """
+    conn = None
+    for key, cfg in bot_config().items():
+        bot = category_bot(key)
+        if bot is None or bot_token(key) == settings.telegram_bot_token:
+            continue
+        try:
+            updates = await bot.get_updates(offset=_offsets.get(key), timeout=0)
+        except TelegramError as exc:
+            log.warning("%s bot: could not read messages: %s", key, exc)
+            continue
+        for u in updates:
+            _offsets[key] = u.update_id + 1
+            if not (u.effective_chat and u.effective_user):
+                continue
+            await bot.send_message(chat_id=u.effective_chat.id,
+                                   text=f"✅ {cfg['name']} is connected. Personalised {key} offers will appear here.")
+            conn = conn or connect()
+            conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            conn.execute("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = "
+                         "excluded.value", (f"bot_started_{key}", str(u.effective_chat.id)))
+            conn.commit()
+            log.info("%s bot: message from @%s (chat %s): connected", key, u.effective_user.username,
+                     u.effective_chat.id)
+    if conn:
+        conn.close()
+
+
 def build_app() -> Application:
     app = Application.builder().token(settings.telegram_bot_token).build()
     app.add_handler(TypeHandler(Update, log_every_update), group=-1)  # runs first, for every update
@@ -111,6 +148,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("help", help_command))
     app.add_error_handler(on_error)
     app.job_queue.run_repeating(deliver, interval=DELIVERY_EVERY_SECONDS, first=3)
+    app.job_queue.run_repeating(greet_category_starts, interval=8, first=2)
     return app
 
 

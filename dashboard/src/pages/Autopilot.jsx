@@ -31,7 +31,7 @@ function BotCard({ b, active, onClick }) {
       <div className="mt-1 text-xs text-muted">{b.next_at ? `Next at ${ist(b.next_at, false)}` : "Done for today"}</div>
       <div className="mt-2 text-[11px] text-muted">
         {b.username && <a href={b.link} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-[#86b6ef] hover:underline">@{b.username}</a>}
-        {" · "}{b.connected ? "connected" : "token not added yet (main bot sends)"}
+        {" · "}{!b.connected ? "token not added yet (main bot sends)" : b.ready ? <span className="text-[#5fd35f]">ready</span> : <span className="text-warning">press Start in Telegram (main bot sends meanwhile)</span>}
       </div>
     </button>
   );
