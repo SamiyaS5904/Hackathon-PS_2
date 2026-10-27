@@ -19,6 +19,7 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 
+from bot.bots import bot_key_for
 from bot.manager import manager_chat
 from engine.clock import parse_ts, to_ts
 
@@ -43,22 +44,24 @@ def due_deliveries(conn: sqlite3.Connection, now: datetime) -> list[dict]:
             # Its validity already ran out (e.g. the bot wasn't running): never send an expired offer
             conn.execute("UPDATE decisions SET status = 'expired' WHERE id = ?", (r["id"],))
             continue
+        bot = bot_key_for((json.loads(r["final_offer"]) if r["final_offer"] else {}).get("category"))
         if manager and r["message"]:
             due.append({"decision_id": r["id"], "chat_id": manager[1], "text": r["message"],
-                        "customer_id": r["customer_id"]})
+                        "customer_id": r["customer_id"], "bot": bot})
             continue
         if r["telegram_chat_id"] is None or not r["message"]:
             conn.execute("UPDATE decisions SET status = 'would_send' WHERE id = ?", (r["id"],))
             continue
         due.append({"decision_id": r["id"], "chat_id": r["telegram_chat_id"], "text": r["message"],
-                    "customer_id": r["customer_id"]})
+                    "customer_id": r["customer_id"], "bot": bot})
     conn.commit()
     return due
 
 
-def mark_sent(conn: sqlite3.Connection, decision_id: int, telegram_message_id: int, now: datetime) -> None:
-    conn.execute("UPDATE decisions SET status = 'sent', sent_at = ?, telegram_message_id = ? WHERE id = ?",
-                 (to_ts(now), telegram_message_id, decision_id))
+def mark_sent(conn: sqlite3.Connection, decision_id: int, telegram_message_id: int, now: datetime,
+              via: str = "main") -> None:
+    conn.execute("UPDATE decisions SET status = 'sent', sent_at = ?, telegram_message_id = ?, sent_via = ? "
+                 "WHERE id = ?", (to_ts(now), telegram_message_id, via, decision_id))
     conn.commit()
 
 

@@ -1,9 +1,10 @@
 // App shell: sidebar navigation + top bar (AI usage today, model, bot) + the pages.
 import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { CalendarClock, ListChecks, Scale, Send, ShieldCheck, Users } from "lucide-react";
+import { Bot, CalendarClock, ListChecks, Scale, Send, ShieldCheck, Users } from "lucide-react";
 import { api } from "./api";
 import Today from "./pages/Today";
+import Autopilot from "./pages/Autopilot";
 import Decisions from "./pages/Decisions";
 import Customers from "./pages/Customers";
 import Testers from "./pages/Testers";
@@ -11,10 +12,12 @@ import Rules from "./pages/Rules";
 import Guardrails from "./pages/Guardrails";
 
 const NAV = [
-  { to: "/", label: "Today", icon: CalendarClock },
-  { to: "/decisions", label: "Decisions", icon: ListChecks },
+  { to: "/", label: "Autopilot", icon: Bot },
   { to: "/customers", label: "Customers", icon: Users },
-  { to: "/testers", label: "Testers", icon: Send },
+  { to: "/decisions", label: "All decisions", icon: ListChecks },
+  { to: "/overview", label: "Overview & budget", icon: CalendarClock },
+  { section: "Settings" },
+  { to: "/testers", label: "Telegram testers", icon: Send },
   { to: "/guardrails", label: "Guardrails", icon: ShieldCheck },
   { to: "/rules", label: "Rules", icon: Scale },
 ];
@@ -62,7 +65,9 @@ export default function App() {
           </div>
         </div>
         <nav className="space-y-1">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {NAV.map(({ to, label, icon: Icon, section }) => section ? (
+            <div key={section} className="px-3 pb-1 pt-5 text-[11px] uppercase tracking-wide text-muted">{section}</div>
+          ) : (
             <NavLink
               key={to}
               to={to}
@@ -83,7 +88,8 @@ export default function App() {
         <TopBar />
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
           <Routes>
-            <Route path="/" element={<Today />} />
+            <Route path="/" element={<Autopilot />} />
+            <Route path="/overview" element={<Today />} />
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/testers" element={<Testers />} />

@@ -1,0 +1,14 @@
+# =====================================================================================================
+# AUTOPILOT: offers planned and sent automatically through the day (engine/autopilot.py)
+# -----------------------------------------------------------------------------------------------------
+# Each day the autopilot picks customers who have a real reason for an offer right now (habit breaking, cart left,
+# product interest, points expiring, idle wallet), N per category bot, and schedules each one at the hour that
+# customer usually shops. When a slot is due, the normal pipeline runs: gatekeeper -> AI (within today's Day Plan)
+# -> rules checker -> the category bot sends it. Every rule still applies; the AI may also decide to send nothing.
+# =====================================================================================================
+
+enabled: true
+offers_per_bot_per_day: 6
+day_start: "09:00"          # IST, first possible send time
+day_end: "21:30"            # IST, last possible send time (quiet hours start at 22:00)
+use_ai: true                # false = free rules only (no API cost)

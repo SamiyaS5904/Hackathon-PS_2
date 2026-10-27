@@ -39,6 +39,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from bot.bots import bot_key_for, bots_status
 from bot.manager import approve, discard, manager_chat
 from bot.testers import add_tester, list_testers, relink_tester
 from config.settings import PROJECT_ROOT, settings
@@ -50,6 +51,8 @@ from engine.features import SENT_STATUSES, build_profile
 from engine.followups import run_due_followups
 from engine.gatekeeper import (USD_TO_INR, agent_runs_used, average_ai_cost_usd, circuit_breaker, estimated_cost,
                                get_day_plan, set_day_plan)
+from engine.autopilot import plan_day, run_due, run_next_now, set_enabled, today_view
+from engine.groups import group_counts
 from engine.guardrails import build_report
 from engine.models import OfferProposal
 from engine.rules import RuleState
@@ -60,6 +63,7 @@ from engine.uplift import get_model
 from events.simulator import fire_cart, fire_search, fire_views, react
 
 FOLLOWUP_EVERY_SECONDS = 300
+AUTOPILOT_EVERY_SECONDS = 30
 log = logging.getLogger("uvicorn.error")  # shows up in the uvicorn console
 
 
@@ -70,14 +74,30 @@ async def _followup_loop() -> None:
     the button or runs the simulator, and the AI's timing plan would never close. It lives here, not in the
     Telegram bot, because a follow-up can call the AI and the bot must never use the Claude API.
     """
+    rounds = 0
     while True:
         try:
-            report = await asyncio.to_thread(lambda: run_due_followups(connect()))
-            for line in report:
-                log.info("follow-up: %s", line)
+            if rounds % (FOLLOWUP_EVERY_SECONDS // AUTOPILOT_EVERY_SECONDS) == 0:
+                report = await asyncio.to_thread(lambda: run_due_followups(connect()))
+                for line in report:
+                    log.info("follow-up: %s", line)
+            # Autopilot: plan today's offers per category bot (once a day) and run the slots that are due
+            ran = await asyncio.to_thread(_autopilot_round)
+            for line in ran:
+                log.info("autopilot: %s", line)
         except Exception:  # noqa: BLE001 - a failed round must not stop the loop; try again next time
-            log.exception("follow-up round failed")
-        await asyncio.sleep(FOLLOWUP_EVERY_SECONDS)
+            log.exception("background round failed")
+        rounds += 1
+        await asyncio.sleep(AUTOPILOT_EVERY_SECONDS)
+
+
+def _autopilot_round() -> list[dict]:
+    conn = connect()
+    try:
+        plan_day(conn)
+        return run_due(conn)
+    finally:
+        conn.close()
 
 
 @asynccontextmanager
@@ -262,6 +282,78 @@ def decisions(limit: int = 50, status: str | None = None, decided_by: str | None
     sql += " ORDER BY d.id DESC LIMIT ?"
     args.append(min(limit, 500))
     return [_decision_row(r) for r in db().execute(sql, args)]
+
+
+@app.get("/api/autopilot")
+def autopilot() -> dict:
+    """
+    The Autopilot page: today's planned and sent offers per category bot, in time order, each with the customer,
+    their group, the offer, the exact Telegram message, why, and the money. Plus one summary card per bot.
+    """
+    conn = db()
+    plan_day(conn)
+    view = today_view(conn)
+    status = {b["key"]: b for b in bots_status()}
+    rows = []
+    for r in view["rows"]:
+        reasoning = _loads(r["reasoning"], {})
+        offer = _loads(r["final_offer"], None)
+        bot = r["sent_via"] if r["sent_via"] and r["sent_via"] != "main" else (
+            bot_key_for(offer.get("category")) if offer else r["bot"])
+        rows.append({
+            "slot_id": r["id"], "time": r["sent_at"] or r["slot_at"], "planned_at": r["slot_at"],
+            "bot": bot, "planned_bot": r["bot"], "customer_id": r["customer_id"], "name": r["first_name"],
+            "group": r["group_label"], "reason": r["reason"], "slot_status": r["slot_status"],
+            "decision_id": r["decision_id"], "status": r["status"] or "planned",
+            "offer": _offer_text(r["final_offer"]), "offer_kind": r["offer_kind"], "message": r["message"],
+            "why": reasoning.get("summary"), "decided_by": r["decided_by"],
+            "expected_profit_rupees": r["expected_profit_paise"] // 100 if r["expected_profit_paise"] is not None else None,
+            "offer_cost_rupees": r["offer_cost_paise"] // 100 if r["offer_cost_paise"] is not None else None,
+        })
+    cards = []
+    for key, info in status.items():
+        mine = [x for x in rows if x["bot"] == key]
+        upcoming = [x for x in rows if x["planned_bot"] == key and x["slot_status"] == "planned"]
+        cards.append({**info,
+                      "planned": len([x for x in rows if x["planned_bot"] == key]),
+                      "sent": sum(1 for x in mine if x["status"] == "sent"),
+                      "no_offer": sum(1 for x in rows if x["planned_bot"] == key and x["slot_status"] != "planned"
+                                      and not x["offer"]),
+                      "expected_profit_rupees": sum(x["expected_profit_rupees"] or 0 for x in mine
+                                                    if x["status"] in ("sent", "queued", "scheduled")),
+                      "next_at": upcoming[0]["planned_at"] if upcoming else None})
+    sent = [x for x in rows if x["status"] == "sent"]
+    return {"day": view["day"], "enabled": view["enabled"], "bots": cards, "rows": rows,
+            "groups": group_counts(conn),
+            "totals": {"planned": len(rows), "sent": len(sent),
+                       "waiting": sum(1 for x in rows if x["slot_status"] == "planned"),
+                       "no_offer": sum(1 for x in rows if x["slot_status"] != "planned" and not x["offer"]),
+                       "expected_profit_rupees": sum(x["expected_profit_rupees"] or 0 for x in sent),
+                       "ai_decisions": sum(1 for x in rows if x["decided_by"] == "agent")}}
+
+
+class AutopilotIn(BaseModel):
+    on: bool
+
+
+@app.post("/api/autopilot/toggle")
+def autopilot_toggle(body: AutopilotIn) -> dict:
+    set_enabled(db(), body.on)
+    return {"enabled": body.on}
+
+
+@app.post("/api/autopilot/run-now")
+def autopilot_run_now() -> dict:
+    """Demo button: run the next planned offer of every bot right now (one decision per bot)."""
+    conn = db()
+    set_enabled(conn, True)
+    return {"ran": run_next_now(conn)}
+
+
+@app.post("/api/autopilot/replan")
+def autopilot_replan() -> dict:
+    """Re-plan the rest of today (keeps offers already decided)."""
+    return {"planned": plan_day(db(), force=True)}
 
 
 @app.get("/api/outbox")

@@ -40,6 +40,7 @@ _ADDED_COLUMNS = [
     ("decisions", "offer_kind", "TEXT DEFAULT 'normal'"),
     ("decisions", "variant_id", "TEXT"),
     ("decisions", "variants", "TEXT"),
+    ("decisions", "sent_via", "TEXT"),
 ]
 
 

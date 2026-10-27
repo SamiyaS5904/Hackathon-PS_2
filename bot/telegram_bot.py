@@ -17,10 +17,11 @@ from __future__ import annotations
 import logging
 import sys
 
-from telegram import Update
+from telegram import Bot, Update
 from telegram.error import TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, TypeHandler
 
+from bot.bots import bot_token
 from bot.delivery import due_deliveries, mark_failed, mark_sent
 from bot.testers import link_chat
 from config.settings import settings
@@ -63,18 +64,42 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "To connect, open the personal link the OfferPilot team shared with you.")
 
 
+_category_bots: dict[str, Bot] = {}
+
+
+def category_bot(key: str) -> Bot | None:
+    """The send-only Bot for a category (config/bots.yaml), or None when its token isn't set."""
+    token = bot_token(key)
+    if not token:
+        return None
+    if key not in _category_bots:
+        _category_bots[key] = Bot(token)
+    return _category_bots[key]
+
+
 async def deliver(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Runs every few seconds: send every offer that's due, then record it as sent."""
+    """Runs every few seconds: send every offer that's due through its category bot, then record it as sent."""
     conn = connect()
     try:
         for item in due_deliveries(conn, now_utc()):
+            bot, via = category_bot(item["bot"]), item["bot"]
             try:
-                sent = await context.bot.send_message(chat_id=item["chat_id"], text=item["text"])
-                mark_sent(conn, item["decision_id"], sent.message_id, now_utc())
-                log.info("sent decision #%s to customer #%s", item["decision_id"], item["customer_id"])
-            except TelegramError as exc:  # e.g. the tester blocked the bot
-                mark_failed(conn, item["decision_id"], f"Telegram: {exc}")
-                log.warning("could not send decision #%s: %s", item["decision_id"], exc)
+                if bot is None:
+                    raise TelegramError("no token for this category bot")
+                sent = await bot.send_message(chat_id=item["chat_id"], text=item["text"])
+            except TelegramError as exc:  # no token, or the category bot wasn't started yet -> main bot
+                if bot is not None:
+                    log.warning("%s bot could not send decision #%s (%s); using the main bot", via,
+                                item["decision_id"], exc)
+                via = "main"
+                try:
+                    sent = await context.bot.send_message(chat_id=item["chat_id"], text=item["text"])
+                except TelegramError as exc2:  # e.g. the person blocked the bot
+                    mark_failed(conn, item["decision_id"], f"Telegram: {exc2}")
+                    log.warning("could not send decision #%s: %s", item["decision_id"], exc2)
+                    continue
+            mark_sent(conn, item["decision_id"], sent.message_id, now_utc(), via)
+            log.info("sent decision #%s to customer #%s via %s bot", item["decision_id"], item["customer_id"], via)
     finally:
         conn.close()
 

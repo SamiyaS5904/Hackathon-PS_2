@@ -217,7 +217,8 @@ CREATE TABLE IF NOT EXISTS decisions (
     telegram_message_id   INTEGER,
     offer_kind            TEXT DEFAULT 'normal', -- 'normal' / 'winback' (relies on retention value; own budget)
     variant_id            TEXT,               -- which message variant was sent (to compare reply rates later)
-    variants              TEXT                -- JSON list of the message variants the agent wrote
+    variants              TEXT,               -- JSON list of the message variants the agent wrote
+    sent_via              TEXT                -- which category bot sent it (config/bots.yaml), or 'main'
 );
 
 -- Real people testing on Telegram, each linked to one customer profile (re-linkable).
