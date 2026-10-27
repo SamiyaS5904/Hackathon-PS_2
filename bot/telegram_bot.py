@@ -18,11 +18,12 @@ import logging
 import sys
 
 from telegram import Bot, Update
-from telegram.error import TelegramError
+from telegram.error import ChatMigrated, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, TypeHandler
 
 from bot.bots import bot_config, bot_token
 from bot.delivery import due_deliveries, mark_failed, mark_sent
+from bot.manager import group_chat, remember_group
 from bot.testers import link_chat
 from config.settings import settings
 from db.store import connect
@@ -46,11 +47,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def log_every_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Log every incoming message (who and what), so linking problems can be diagnosed from the log."""
+    """Log every incoming message (who and what); if it comes from a group, remember it as the showcase group."""
     user = update.effective_user
     text = update.effective_message.text if update.effective_message else None
-    log.info("update from @%s (chat %s): %r", user.username if user else "?",
-             update.effective_chat.id if update.effective_chat else "?", text)
+    chat = update.effective_chat
+    log.info("update from @%s (chat %s): %r", user.username if user else "?", chat.id if chat else "?", text)
+    if chat and chat.type in ("group", "supergroup"):
+        _note_group(chat.id, chat.title)
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -100,11 +103,39 @@ async def deliver(context: ContextTypes.DEFAULT_TYPE) -> None:
                     continue
             mark_sent(conn, item["decision_id"], sent.message_id, now_utc(), via)
             log.info("sent decision #%s to customer #%s via %s bot", item["decision_id"], item["customer_id"], via)
+            await _post_to_group(context.bot if via == "main" else bot, conn, item["text"])
     finally:
         conn.close()
 
 
 _offsets: dict[str, int] = {}
+
+
+def _note_group(chat_id: int, title: str | None) -> None:
+    """A bot was added to (or heard from) a group: that group becomes the public showcase group."""
+    conn = connect()
+    try:
+        if remember_group(conn, chat_id):
+            log.info("showcase group set: %s (chat %s); every sent offer will also be posted there", title, chat_id)
+    finally:
+        conn.close()
+
+
+async def _post_to_group(bot: Bot, conn, text: str) -> None:
+    """Post the same offer message in the showcase group, if there is one. A failure never blocks delivery."""
+    group = group_chat(conn)
+    if group is None:
+        return
+    try:
+        await bot.send_message(chat_id=group, text=text)
+    except ChatMigrated as exc:  # the group became a supergroup: new id, try once more
+        remember_group(conn, exc.new_chat_id)
+        try:
+            await bot.send_message(chat_id=exc.new_chat_id, text=text)
+        except TelegramError as exc2:
+            log.warning("could not post to the group: %s", exc2)
+    except TelegramError as exc:
+        log.warning("could not post to the group (is this bot a member/admin there?): %s", exc)
 
 
 async def greet_category_starts(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -126,6 +157,9 @@ async def greet_category_starts(context: ContextTypes.DEFAULT_TYPE) -> None:
             continue
         for u in updates:
             _offsets[key] = u.update_id + 1
+            if u.effective_chat and u.effective_chat.type in ("group", "supergroup"):
+                _note_group(u.effective_chat.id, u.effective_chat.title)
+                continue
             if not (u.effective_chat and u.effective_user):
                 continue
             await bot.send_message(chat_id=u.effective_chat.id,
@@ -161,7 +195,7 @@ def main() -> None:
         raise SystemExit("TELEGRAM_BOT_TOKEN is missing in .env")
     log.info("OfferPilot bot @%s running: delivering due offers every %ss", settings.telegram_bot_username,
              DELIVERY_EVERY_SECONDS)
-    build_app().run_polling(allowed_updates=Update.ALL_TYPES)
+    build_app().run_polling(allowed_updates=Update.ALL_TYPES)   # ALL_TYPES includes "added to a group"
 
 
 if __name__ == "__main__":

@@ -97,6 +97,7 @@ export default function Autopilot() {
         <div>
           <h1 className="text-2xl font-semibold">Autopilot</h1>
           <p className="mt-1 text-sm text-muted">{day} · 6 category bots · each offer runs at the customer's usual shopping time; the AI decides and the rules check every one.</p>
+          <p className="mt-1 text-xs text-muted">Public Telegram group: {data.group_connected ? <span className="text-[#5fd35f]">connected, every sent offer is also posted there</span> : "not set up yet (add the bots to a group)"}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={data.enabled ? "good" : "warning"}>{data.enabled ? "Running" : "Paused"}</Badge>

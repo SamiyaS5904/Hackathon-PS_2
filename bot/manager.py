@@ -34,6 +34,30 @@ def manager_chat(conn: sqlite3.Connection) -> tuple[str, int] | None:
     return (row[0], row[1]) if row else None
 
 
+def group_chat(conn: sqlite3.Connection) -> int | None:
+    """
+    The public showcase group ("OfferPilot Live Offers"): every sent offer is also posted there by the same bot, so
+    anyone with the group link can watch the six bots working. TELEGRAM_GROUP_CHAT_ID in .env wins; otherwise the id
+    the bots recorded when they were added to a group (meta 'group_chat_id'). None = no group.
+    """
+    if settings.telegram_group_chat_id:
+        return int(settings.telegram_group_chat_id)
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone() is None:
+        return None
+    row = conn.execute("SELECT value FROM meta WHERE key = 'group_chat_id'").fetchone()
+    return int(row[0]) if row else None
+
+
+def remember_group(conn: sqlite3.Connection, chat_id: int) -> bool:
+    """Save the showcase group's id (called when a bot sees a group). Returns True if it was new."""
+    conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    old = conn.execute("SELECT value FROM meta WHERE key = 'group_chat_id'").fetchone()
+    conn.execute("INSERT INTO meta (key, value) VALUES ('group_chat_id', ?) ON CONFLICT(key) DO UPDATE SET "
+                 "value = excluded.value", (str(chat_id),))
+    conn.commit()
+    return old is None or old[0] != str(chat_id)
+
+
 def approve(conn: sqlite3.Connection, decision_id: int, now: datetime) -> str | None:
     """
     Send a draft: 'queued' (the bot sends it within seconds), or 'scheduled' if its send time is still ahead

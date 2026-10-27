@@ -211,3 +211,16 @@ def test_decide_can_hold_an_offer_as_a_draft(db):
     assert out.status in ("review", "nothing")                      # an approved offer becomes a draft
     if out.offer is not None:
         assert out.status == "review"
+
+
+def test_showcase_group_is_remembered_and_env_wins(db, monkeypatch):
+    import dataclasses
+
+    import bot.manager
+    from bot.manager import group_chat, remember_group
+    assert group_chat(db) is None
+    assert remember_group(db, -100123) and not remember_group(db, -100123)   # new once, then unchanged
+    assert group_chat(db) == -100123
+    monkeypatch.setattr(bot.manager, "settings",
+                        dataclasses.replace(bot.manager.settings, telegram_group_chat_id="-100999"))
+    assert group_chat(db) == -100999

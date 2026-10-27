@@ -40,7 +40,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from bot.bots import bot_key_for, bot_token, bots_status
-from bot.manager import approve, discard, manager_chat
+from bot.manager import approve, discard, group_chat, manager_chat
 from bot.testers import add_tester, list_testers, relink_tester
 from config.settings import PROJECT_ROOT, settings
 from db.store import connect
@@ -330,6 +330,7 @@ def autopilot() -> dict:
                       "next_at": upcoming[0]["planned_at"] if upcoming else None})
     sent = [x for x in rows if x["status"] == "sent"]
     return {"day": view["day"], "enabled": view["enabled"], "bots": cards, "rows": rows,
+            "group_connected": group_chat(conn) is not None,
             "groups": group_counts(conn),
             "totals": {"planned": len(rows), "sent": len(sent),
                        "waiting": sum(1 for x in rows if x["slot_status"] == "planned"),
