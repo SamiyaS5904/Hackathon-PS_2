@@ -729,3 +729,19 @@ in all 16 (fails: window shopper #217 Rs 100 off a Rs 499 order = 20%; new user 
 
 **Possible next steps (not done, need a decision):** a lateness signal that catches hidden breaks earlier (e.g. falling
 order frequency, not just days overdue); habit threshold 0.7 → 0.8; larger AI samples to separate signal from noise.
+
+## 2026-10-27: Autopilot, customer groups, 6 category bots (instructor feedback)
+**Built:** `engine/groups.py` (all 3,000 customers grouped: Everyday shopper 1,173, Loyal regular 465, Cart abandoner
+429, New customer 414, Deal hunter 267, About-to-leave VIP 215, Points collector 37; plus favourite category, usual
+shopping hour, current trigger); `engine/autopilot.py` (6 offers per bot per day, varied groups, each at the
+customer's usual hour inside 09:00-21:30, run by the API loop every 30 s through the normal pipeline; Pause/Resume,
+"Run next round now"); `bot/bots.py` + `config/bots.yaml` (Electronics, Fashion, Beauty, Home, Grocery, Rewards; an
+offer goes out through its category's bot, main bot as fallback); `config/autopilot.yaml`; new **Autopilot** home page
+(bot cards, timeline with customer, group, reason, offer, exact message, why, profit); simpler navigation.
+Messages still go only to the manager's Telegram (TELEGRAM_MANAGER_USERNAME).
+
+**Bug found and fixed:** the Run-now button and the background loop ran the same 3 slots at once, so 3 customers got
+two offers each (duplicate messages on Telegram, ~Rs 6 of AI wasted). Slots are now claimed atomically before they
+run, plus an in-process lock; regression test with two overlapping runs. **202+1 tests pass.**
+
+**Cost:** about 36 AI decisions a day (~Rs 70), capped by the Day Plan (50); beyond it the free rules decide.
