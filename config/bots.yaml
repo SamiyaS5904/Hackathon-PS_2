@@ -4,7 +4,7 @@
 # Every approved offer is sent by the bot of its category (the offer's product/category); offers with no category
 # (points, wallet, free delivery on the whole order, reminders) go through the Rewards bot.
 # Tokens are secrets: put them in .env under token_env. A bot without a token falls back to the main bot
-# (TELEGRAM_BOT_TOKEN), so nothing is lost. The manager must press Start once in each bot so it may message them.
+# (TELEGRAM_BOT_TOKEN), so nothing is lost. The Rewards bot IS the main bot (it also handles /start links). The manager must press Start once in each bot so it may message them.
 # =====================================================================================================
 
 bots:
@@ -13,4 +13,4 @@ bots:
   beauty:      {name: "OfferPilot Beauty",      token_env: TELEGRAM_BOT_TOKEN_BEAUTY, username: offerpilot_beauty_bot}
   home:        {name: "OfferPilot Home",        token_env: TELEGRAM_BOT_TOKEN_HOME, username: offerpilot_home_bot}
   grocery:     {name: "OfferPilot Grocery",     token_env: TELEGRAM_BOT_TOKEN_GROCERY, username: offerpilot_grocery_bot}
-  rewards:     {name: "OfferPilot Rewards",     token_env: TELEGRAM_BOT_TOKEN_REWARDS, username: offerpilot_rewards_bot}
+  rewards:     {name: "OfferPilot Rewards",     token_env: TELEGRAM_BOT_TOKEN, username: offer_pilot_samiya_bot}   # the original main bot

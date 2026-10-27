@@ -15,7 +15,7 @@ past campaigns) → the right offer for the right person at the right moment, wi
 | Full-price share of orders in the next 12 weeks | AI + rules 59% (v1 engine 59%), send to all 55%, no offers 65% |
 | Offers sent | AI + rules 21 of 24 (v1 engine 22) |
 | AI behaviour in 16 golden scenarios | 14/16 (pass bar 14), reasoning complete in all 16 |
-| Automatic tests | 193 pass: every rule, thousands of random offers (hypothesis), attacks, every AI failure path, the CSV importer |
+| Automatic tests | 203 pass: every rule, thousands of random offers (hypothesis), attacks, every AI failure path, the CSV importer, the autopilot |
 | Approved offers with negative total expected value | **0** (total = immediate profit + retention value, by construction); the **10% margin floor holds on every offer**. Normal offers also need ≥ ₹20 immediate profit; win-back offers may rely on retention value, inside their own smaller budget |
 | Cost per AI decision | ~₹1.6–2.4 (Claude Sonnet 5.5, one call in most cases) |
 
@@ -33,6 +33,35 @@ Full outputs: [docs/evidence/](docs/evidence/).
   behaviour" we wrote ourselves); there is **no store**, so nobody actually redeems anything; the AI checks use small
   samples (24 customers) because each AI decision costs money. The CSV importer makes it run on a real export, but it
   has not been proven on one yet.
+
+## What it does every day (autopilot + 6 Telegram bots)
+
+- **Customer groups:** all 3,000 customers are grouped from what they actually do: About-to-leave VIP, Loyal
+  regular, Deal hunter, Cart abandoner, Points collector, New customer, Everyday shopper. Each customer also gets a
+  favourite category, the hour they usually shop, and their current reason for an offer (habit breaking, cart left,
+  product interest, points expiring, idle wallet). `python -m engine.groups`
+- **Autopilot:** every day it plans **6 offers per bot** (36 a day), mixing customer groups, and schedules each one at
+  the hour that customer usually shops (09:00-21:30 IST). When a slot is due, the normal pipeline runs: the AI decides
+  (or sends nothing), the rules check, and the offer goes out automatically. Pause / Resume and "Run next round now"
+  are on the dashboard. Settings: `config/autopilot.yaml`.
+- **Six category bots:** each offer is sent by the bot of its category. Offers with no category (points, wallet,
+  free delivery on the whole order) go through the Rewards bot. Settings: `config/bots.yaml`.
+
+| Bot | Telegram | Sends |
+|---|---|---|
+| OfferPilot Electronics | @offerpilot_electronics_bot | electronics offers |
+| OfferPilot Fashion | @offerpilot_fashion_bot | fashion offers |
+| OfferPilot Beauty | @offerpilot_beauty_bot | beauty offers |
+| OfferPilot Home | @offerpilot_home_bot | home offers |
+| OfferPilot Grocery | @offerpilot_grocery_bot | grocery offers |
+| OfferPilot Rewards | @offer_pilot_samiya_bot (the original bot) | points, wallet, whole-order offers; also handles /start links |
+
+- **Demo mode (manager mode):** every message goes to one Telegram account (`TELEGRAM_MANAGER_USERNAME` in `.env`),
+  exactly as the customer would see it. Who it was for and why is on the dashboard. Leave the setting empty to send
+  each offer to the tester linked to that customer instead.
+- **Dashboard home = Autopilot:** one card per bot (sent / planned, expected profit, next send), then today's offers
+  in time order: customer, group, reason, offer, the exact Telegram message, why, and the money. Click any offer for
+  the AI's full reasoning and every rule check.
 
 ## How it decides
 
@@ -89,22 +118,39 @@ Why each part works this way: [reasoning.md](reasoning.md). The full rulebook: [
 
 Needs Python 3.11+ and Node 18+.
 
+**First time (setup):**
 ```bash
 pip install -r requirements.txt
-cp .env.example .env          # add ANTHROPIC_API_KEY and TELEGRAM_BOT_TOKEN (both optional, see below)
+cp .env.example .env          # then fill it in, see the table below
 python -m data.generate --customers 3000 --months 12    # ~170 MB SQLite database, a few minutes
-python -m engine.uplift --train                         # uplift model, ~90 s, no API
+python -m engine.uplift --train                         # uplift model, ~2 min, no API
+python -m engine.groups                                 # customer groups for the autopilot, ~2-3 min, no API
 cd dashboard && npm install && npm run build && cd ..
-python -m uvicorn api.main:app --port 8010              # dashboard at http://127.0.0.1:8010
-python -u -m bot.telegram_bot                            # second terminal: Telegram delivery
 ```
+
+**Every time:** double-click **`start_offerpilot.bat`** (Windows), or run these two in separate terminals:
+```bash
+python -m uvicorn api.main:app --port 8010              # dashboard + API + autopilot -> http://127.0.0.1:8010
+python -u -m bot.telegram_bot                            # the Telegram bots
+```
+
+**`.env` settings:**
+| Setting | What it is |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key (only `engine/agent.py` uses it). Empty = the free rules decide everything. |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` | The main bot = OfferPilot Rewards (also handles tester links). |
+| `TELEGRAM_BOT_TOKEN_ELECTRONICS` … `_GROCERY` | One token per category bot from @BotFather. Empty = that category uses the main bot. |
+| `TELEGRAM_MANAGER_USERNAME` | Demo mode: every offer goes to this Telegram user. |
+| `MAX_AGENT_RUNS_PER_DAY` | Hard ceiling on AI decisions per day (default 50, about ₹100). |
+
+Each bot can only message someone who has pressed **Start** in it once, so open every bot in Telegram and press Start.
 
 - **No Claude key?** Everything still works: the free fallback rules decide, and are checked the same way.
 - **No Telegram token?** Decisions are shown as "would send" on the dashboard.
 
 Tests:
 ```bash
-pytest harness/                          # 193 tests, no API, ~2 minutes
+pytest harness/                          # 203 tests, no API, ~2 minutes
 python -m harness.eval_uplift            # free: uplift model vs formula vs blend, against the hidden truth
 python -m harness.eval_segments          # free: do the Testers page profiles match the hidden personas?
 python -m harness.simulate_profit        # real AI on 24 customers, 48h + 12-week profit, full-price share
@@ -114,30 +160,58 @@ python -m harness.eval_agent_scenarios   # real AI, 16 golden scenarios
 
 ## Deploy
 
-**On this laptop (demo):** double-click `start_offerpilot.bat`. It opens the dashboard + autopilot window, the
-Telegram bots window, and the dashboard at http://127.0.0.1:8010. Keep both windows open; offers only go out while
-they run. After editing `.env` (e.g. new bot tokens), close both windows and start again.
+**Option 1: this laptop (fine for a demo).** Double-click `start_offerpilot.bat`. Keep both windows open: offers only
+go out while they run, and the laptop must not sleep. After editing `.env`, close both windows and start again.
 
-**Always on (a small cloud server, e.g. a ₹500/month Linux VM on AWS Lightsail / DigitalOcean / Azure):**
-1. Copy the project (`git clone https://github.com/SamiyaS5904/Hackathon-PS_2`), then copy `.env`, `data/offerpilot.db`
-   and `models/uplift.joblib` to the server (they're not in git on purpose).
-2. `pip install -r requirements.txt` and build the dashboard once (`cd dashboard && npm install && npm run build`).
-3. Run the two processes as services so they restart on reboot (systemd or `pm2`):
-   `python -m uvicorn api.main:app --host 0.0.0.0 --port 8010` and `python -u -m bot.telegram_bot`.
-4. Put the dashboard behind a login (e.g. Nginx basic auth or Cloudflare Access) before opening port 8010: it can
-   send real messages.
-Telegram needs no webhook or public address: the bot polls Telegram, so it works from any machine with internet.
+**Option 2: always on, on a small Linux cloud server** (for example a ₹500-800/month VM on AWS Lightsail,
+DigitalOcean or Azure; Ubuntu 22.04+, 1 GB RAM is enough).
+1. Get the code and the files that are deliberately not in git (secrets, data, model):
+   ```bash
+   git clone https://github.com/SamiyaS5904/Hackathon-PS_2.git offerpilot && cd offerpilot
+   # from your laptop: scp .env data/offerpilot.db models/uplift.joblib  user@server:offerpilot/  (into the same folders)
+   ```
+2. Install and build once:
+   ```bash
+   sudo apt update && sudo apt install -y python3-venv nodejs npm
+   python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+   cd dashboard && npm install && npm run build && cd ..
+   ```
+3. Run both programs as services so they survive reboots. Create `/etc/systemd/system/offerpilot-api.service`:
+   ```ini
+   [Unit]
+   Description=OfferPilot dashboard + API + autopilot
+   After=network-online.target
+
+   [Service]
+   WorkingDirectory=/home/ubuntu/offerpilot
+   ExecStart=/home/ubuntu/offerpilot/.venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8010
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   and `offerpilot-bot.service` the same way with `ExecStart=.../.venv/bin/python -u -m bot.telegram_bot`. Then:
+   ```bash
+   sudo systemctl daemon-reload && sudo systemctl enable --now offerpilot-api offerpilot-bot
+   ```
+4. **Put a login in front of the dashboard before making it public**: it can send real messages and spend API money.
+   The simplest is Nginx with basic auth (`proxy_pass http://127.0.0.1:8010;` + `auth_basic`), or Cloudflare Tunnel +
+   Cloudflare Access. Never open port 8010 to the internet without one.
+
+Telegram needs no webhook or public address: the bots poll Telegram, so they work from any machine with internet.
+Run only **one** copy of the bot at a time (two copies polling the same token conflict).
 
 ## Demo in 5 minutes
 
-1. **Today**: greeting, *Plan your day* (how many AI decisions to allow, and what that costs).
-2. **Testers** → *Pick a profile to play* → About-to-leave VIP → link your Telegram (QR code).
-3. **Customers** → that customer → **Run AI agent** → the offer arrives on Telegram.
-4. **Decisions** → open it: why this offer, why now, what else was considered, every rule check.
-5. **Testers** → re-link the same Telegram to a *Loyal regular* → run again → a different decision (often nothing:
-   they'd buy anyway).
-6. **Guardrails**: what each rule caught, budgets, circuit breaker, and the proof from the harness.
-7. **Rules**: change the electronics cap 8% → 12%; it's saved as a new version and the next decision uses it.
+1. **Autopilot** (home): six bot cards and today's 36 planned offers, each at the customer's usual shopping time.
+   Point at one that was sent: customer, group, reason, the exact message, why, expected profit.
+2. Click **Run next round now**: each bot runs its next offer; within ~15 seconds the messages arrive on your phone,
+   each from its own category bot (show the six bot chats).
+3. Click one offer: the AI's reasoning (facts used, options rejected with their numbers, win-back or normal) and every
+   rule check.
+4. **Customers** → any customer → **Make offer (AI)** → check the message → **Send to Telegram** (one offer by hand).
+5. **Rules**: change the electronics cap 8% → 12%; it's saved as a new version and the next decision uses it.
+6. **Guardrails**: what each rule caught, budgets, circuit breaker, and the proof from the tests.
 
 Real-tester guide: [TESTING.md](TESTING.md).
 
@@ -146,12 +220,12 @@ Real-tester guide: [TESTING.md](TESTING.md).
 | Folder | What's in it |
 |---|---|
 | `data/` | synthetic data generator (8 hidden personas, festivals, paydays, habits that break, discount training) and the CSV importer |
-| `engine/` | profile, triggers, candidate menu, profit, uplift model, gatekeeper, agent, rules, fallback, follow-ups |
-| `bot/` | Telegram bot, tester linking / re-linking, delivery |
+| `engine/` | profile, customer groups, autopilot, triggers, candidate menu, profit, uplift model, gatekeeper, agent, rules, fallback, follow-ups |
+| `bot/` | Telegram bots (6 category bots), manager mode, tester linking / re-linking, delivery |
 | `api/` | FastAPI for the dashboard (no decision logic of its own) |
 | `dashboard/` | React + Vite + Tailwind + Recharts |
 | `harness/` | tests and AI checks (the only code besides the generator that may read the hidden truth) |
-| `config/` | rules, offer types, message templates, brand voice |
+| `config/` | rules, offer types, message templates, brand voice, bots, autopilot |
 | `docs/evidence/` | saved outputs of real runs |
 | `docs/csv_import/` | column mapping example, sample brand export, import guide |
 
