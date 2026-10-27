@@ -34,4 +34,5 @@ def bot_token(key: str) -> str:
 
 def bots_status() -> list[dict]:
     """For the dashboard: each bot's name and whether its own token is set (otherwise the main bot is used)."""
-    return [{"key": k, "name": v["name"], "connected": bool(bot_token(k))} for k, v in bot_config().items()]
+    return [{"key": k, "name": v["name"], "connected": bool(bot_token(k)), "username": v.get("username"),
+             "link": f"https://t.me/{v['username']}" if v.get("username") else None} for k, v in bot_config().items()]

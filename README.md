@@ -112,6 +112,22 @@ python -m harness.simulate_profit --skip-ai   # free: the same without the AI co
 python -m harness.eval_agent_scenarios   # real AI, 16 golden scenarios
 ```
 
+## Deploy
+
+**On this laptop (demo):** double-click `start_offerpilot.bat`. It opens the dashboard + autopilot window, the
+Telegram bots window, and the dashboard at http://127.0.0.1:8010. Keep both windows open; offers only go out while
+they run. After editing `.env` (e.g. new bot tokens), close both windows and start again.
+
+**Always on (a small cloud server, e.g. a ₹500/month Linux VM on AWS Lightsail / DigitalOcean / Azure):**
+1. Copy the project (`git clone https://github.com/SamiyaS5904/Hackathon-PS_2`), then copy `.env`, `data/offerpilot.db`
+   and `models/uplift.joblib` to the server (they're not in git on purpose).
+2. `pip install -r requirements.txt` and build the dashboard once (`cd dashboard && npm install && npm run build`).
+3. Run the two processes as services so they restart on reboot (systemd or `pm2`):
+   `python -m uvicorn api.main:app --host 0.0.0.0 --port 8010` and `python -u -m bot.telegram_bot`.
+4. Put the dashboard behind a login (e.g. Nginx basic auth or Cloudflare Access) before opening port 8010: it can
+   send real messages.
+Telegram needs no webhook or public address: the bot polls Telegram, so it works from any machine with internet.
+
 ## Demo in 5 minutes
 
 1. **Today**: greeting, *Plan your day* (how many AI decisions to allow, and what that costs).
