@@ -7,6 +7,44 @@ delivered on Telegram; a company dashboard shows every decision and exactly why.
 Built for a hackathon problem statement: years of customer data (orders, browsing, carts, wallet, reward points,
 past campaigns) → the right offer for the right person at the right moment, with hard limits the AI can't cross.
 
+## Links
+
+| What | Where |
+|---|---|
+| Live dashboard | https://offerpilot-samiya.fly.dev (password-protected; ask the team for the login) |
+| Telegram group (public) | https://t.me/+LyvVlulkewU4Yjg1 (*OfferPilot Live Offers*) |
+| Telegram bots | Electronics https://t.me/offerpilot_electronics_bot · Fashion https://t.me/offerpilot_fashion_bot · Beauty https://t.me/offerpilot_beauty_bot · Home https://t.me/offerpilot_home_bot · Grocery https://t.me/offerpilot_grocery_bot · Rewards https://t.me/offer_pilot_samiya_bot |
+| Testing dataset | [dataset/](dataset/) (`offerpilot_dataset_csv.zip`, 13 tables as CSV) |
+| Docs | [reasoning.md](reasoning.md) (why) · [documentation.md](documentation.md) (build log) · [TESTING.md](TESTING.md) (tests) |
+
+(All 6 bots send every offer individually and also post it in the public group above.)
+
+## Screenshots
+
+**Dashboard: Autopilot home** (six bots, today's planned offers at each customer's usual shopping time)
+
+![Autopilot home](docs/screenshots/s_autopilot.png)
+
+| Every decision explains itself | "No offer" is a decision too |
+|---|---|
+| ![Decision reasoning](docs/screenshots/s_drawer_top.png) | ![No offer](docs/screenshots/s_nooffer.png) |
+
+| Customers: make one offer by hand | Guardrails: budgets, circuit breaker, proof |
+|---|---|
+| ![Customers](docs/screenshots/s_customers.png) | ![Guardrails](docs/screenshots/s_guardrails.png) |
+
+**Telegram: each offer is sent by the bot of its category** (real messages, 27 Oct 2026)
+
+| Electronics | Fashion | Beauty |
+|---|---|---|
+| ![Electronics bot](docs/screenshots/tg_electronics.webp) | ![Fashion bot](docs/screenshots/tg_fashion.png) | ![Beauty bot](docs/screenshots/tg_beauty.webp) |
+
+| Home | Grocery | Rewards |
+|---|---|---|
+| ![Home bot](docs/screenshots/tg_home.png) | ![Grocery bot](docs/screenshots/tg_grocery.webp) | ![Rewards bot](docs/screenshots/tg_rewards.png) |
+
+More dashboard screenshots: [docs/screenshots/](docs/screenshots/).
+
 ## Results (scored against hidden ground truth)
 
 | Check | Result |
