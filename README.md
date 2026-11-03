@@ -11,7 +11,7 @@ past campaigns) → the right offer for the right person at the right moment, wi
 
 | What | Where |
 |---|---|
-| Live dashboard | https://offerpilot-samiya.fly.dev (password-protected; ask the team for the login) |
+| Live dashboard | https://offerpilot-samiya.fly.dev (username: admin, password: op-iWnLN5fMM0uJ) |
 | Telegram group (public) | https://t.me/+LyvVlulkewU4Yjg1 (*OfferPilot Live Offers*) |
 | Telegram bots | Electronics https://t.me/offerpilot_electronics_bot · Fashion https://t.me/offerpilot_fashion_bot · Beauty https://t.me/offerpilot_beauty_bot · Home https://t.me/offerpilot_home_bot · Grocery https://t.me/offerpilot_grocery_bot · Rewards https://t.me/offer_pilot_samiya_bot |
 | Testing dataset | [dataset/](dataset/) (`offerpilot_dataset_csv.zip`, 13 tables as CSV) |
