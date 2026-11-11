@@ -34,3 +34,6 @@ models/
 
 # Local Claude Code launch configs
 .claude/
+
+# Database backups from Fly (real Telegram chat ids; never commit, never upload in a build)
+backups/

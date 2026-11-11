@@ -14,3 +14,4 @@ data/*.db-journal
 docs/evidence
 .claude
 .vscode
+backups

@@ -205,7 +205,18 @@ python -m harness.eval_agent_scenarios   # real AI, 16 golden scenarios
 **Option 1: this laptop (fine for a demo).** Double-click `start_offerpilot.bat`. Keep both windows open: offers only
 go out while they run, and the laptop must not sleep. After editing `.env`, close both windows and start again.
 
-**Live now: https://offerpilot-samiya.fly.dev** (login: any username + the dashboard password).
+**Paused since 11 Nov 2026 (zero cost):** the Fly app `offerpilot-samiya` still exists with its secrets, but it has
+no machine and no volume. The live database at the moment of pausing (297 decisions) is saved on the laptop in
+`backups/offerpilot_fly_2026-11-11.db` (and `.db.gz`). Not in git: it holds real Telegram chat ids. Keep a copy on
+Google Drive too. To bring https://offerpilot-samiya.fly.dev back exactly as it was (PowerShell, project folder):
+```powershell
+Copy-Item data\offerpilot.db data\offerpilot_laptop.db                  # keep the laptop's own copy
+Copy-Item backups\offerpilot_fly_2026-11-11.db data\offerpilot.db       # the live data goes into the build
+fly volumes create offerpilot_data --region sin --size 1 -a offerpilot-samiya --yes
+fly deploy --remote-only --ha=false -a offerpilot-samiya                # ~5 min; first start copies the db onto the volume
+```
+Same link, same login, same bots. To pause again with zero cost: back up the database first (as above), then
+`fly scale count 0 -a offerpilot-samiya --yes` and `fly volumes destroy <volume id> -a offerpilot-samiya`.
 
 **Option 2: always on, with Fly.io (ready: `Dockerfile`, `fly.toml`, `deploy/start.sh`).** One small machine in
 Singapore (Fly has no Mumbai region) runs the dashboard + autopilot and all six bots; the database lives on a persistent volume. About $3-5 a month.
